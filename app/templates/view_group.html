@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}{{ group.name if group else "Group" }} - Expense Tracker{% endblock %}
+
+{% block content %}
+{% if group %}
+    <h1>{{ group.name }}</h1>
+    <p>Description: {{ group.description if group.description else "N/A" }}</p>
+    <p>Created by: {{ group.creator.username if group.creator else "N/A" }} on {{ group.created_at.strftime('%Y-%m-%d') if group.created_at else "N/A" }}</p>
+
+    <h2>Members</h2>
+    {% if group.members %}
+        <ul>
+            {% for member in group.members %}
+            <li>{{ member.username }}</li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>This group has no members yet.</p>
+    {% endif %}
+
+    <h2>Add Member to Group</h2>
+    <form action="{{ url_for('handle_add_member_to_group', group_id=group.id) }}" method="post">
+        <div>
+            <label for="user_id_to_add">User to Add:</label>
+            <select id="user_id_to_add" name="user_id" required>
+                <option value="">Select User</option>
+                {% for user_to_add in users_to_add %}
+                <option value="{{ user_to_add.id }}">{{ user_to_add.username }} ({{ user_to_add.email }})</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit">Add Member</button>
+    </form>
+{% else %}
+    <h1>Group not found</h1>
+    <p>The requested group does not exist.</p>
+{% endif %}
+{% endblock %}

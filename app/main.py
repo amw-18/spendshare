@@ -1,8 +1,10 @@
 from fastapi import FastAPI
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager # For lifespan events in newer FastAPI
 
 from app.db.database import create_db_and_tables # Async version
-from app.routers import users, groups, expenses # Async routers
+from app.routers import users, groups, expenses, frontend # Async routers
 
 # Lifespan context manager for startup and shutdown events
 @asynccontextmanager
@@ -23,10 +25,17 @@ app = FastAPI(
     lifespan=lifespan # Use the lifespan context manager
 )
 
+templates = Jinja2Templates(directory="app/templates")
+app.state.templates = templates # Make templates accessible to routers via request.app.state
+
+# Mount static files directory
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
 # Include routers
 app.include_router(users.router, prefix="/api/v1") # Example prefix
 app.include_router(groups.router, prefix="/api/v1")
 app.include_router(expenses.router, prefix="/api/v1")
+app.include_router(frontend.router) # Include frontend router
 
 @app.get("/")
 async def read_root():
