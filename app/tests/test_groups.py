@@ -37,7 +37,7 @@ async def test_create_group_creator_not_found(client: AsyncClient):
     }
     response = await client.post("/api/v1/groups/", json=group_data)
     assert response.status_code == status.HTTP_404_NOT_FOUND
-    assert "creator user not found" in response.json()["detail"].lower()
+    assert response.json()["detail"] == "User with id 99999 not found"
 
 
 @pytest.mark.asyncio
@@ -149,9 +149,7 @@ async def test_add_member_group_not_found(client: AsyncClient):
     )
     response = await client.post(f"/api/v1/groups/9991/members/{some_user['id']}")
     assert response.status_code == status.HTTP_404_NOT_FOUND
-    assert (
-        "group not found" in response.json()["detail"].lower()
-    )  # Based on router error handling
+    assert response.json()["detail"] == "Group with id 9991 not found"
 
 
 @pytest.mark.asyncio
@@ -167,9 +165,7 @@ async def test_add_member_user_not_found(client: AsyncClient):
         f"/api/v1/groups/{group_id}/members/9992"
     )  # Non-existent user
     assert response.status_code == status.HTTP_404_NOT_FOUND
-    assert (
-        "user not found" in response.json()["detail"].lower()
-    )  # Based on router error handling
+    assert response.json()["detail"] == "User with id 9992 not found"
 
 
 @pytest.mark.asyncio
@@ -199,9 +195,8 @@ async def test_remove_member_from_group_success(client: AsyncClient):
     response_again = await client.delete(
         f"/api/v1/groups/{group_id}/members/{member_to_remove['id']}"
     )
-    assert (
-        response_again.status_code == status.HTTP_200_OK
-    )  # Or 404 if CRUD indicates "member not found" more strictly
+    assert response_again.status_code == status.HTTP_404_NOT_FOUND
+    assert response_again.json()["detail"] == "User is not a member of this group."
 
 
 @pytest.mark.asyncio
@@ -211,7 +206,7 @@ async def test_remove_member_group_not_found(client: AsyncClient):
     )
     response = await client.delete(f"/api/v1/groups/9993/members/{some_user['id']}")
     assert response.status_code == status.HTTP_404_NOT_FOUND
-    assert "group not found" in response.json()["detail"].lower()
+    assert response.json()["detail"] == "Group with id 9993 not found"
 
 
 # Test removing the creator from the group (should be possible unless specific logic prevents it)
@@ -224,8 +219,10 @@ async def test_remove_creator_from_group(client: AsyncClient):
     create_response = await client.post("/api/v1/groups/", json=group_data)
     group_id = create_response.json()["id"]
 
-    # Creator is initially a member.
+    # Creator is automatically added as a member during group creation.
     # Try to remove the creator.
     response = await client.delete(f"/api/v1/groups/{group_id}/members/{creator['id']}")
     assert response.status_code == status.HTTP_200_OK
-    # Further checks could involve verifying the member list if GroupReadWithMembers was used.
+    # Optionally, verify the creator is no longer in the group's members list
+    # by fetching the group again and checking its 'members' field if available.
+    # For now, just asserting the successful removal status code.

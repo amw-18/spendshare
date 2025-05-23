@@ -60,6 +60,7 @@ class ExpenseCreate(ExpenseBase):
 class ExpenseRead(ExpenseBase):
     id: int
     date: datetime
+    participant_details: List["ExpenseParticipantReadWithUser"] = [] # Added for reading shares and user
 
 
 class ExpenseUpdate(SQLModel):
@@ -67,6 +68,27 @@ class ExpenseUpdate(SQLModel):
     amount: Optional[float] = None
     paid_by_user_id: Optional[int] = None
     group_id: Optional[int] = None
+    participants: Optional[List["ParticipantUpdate"]] = None # Added participants field
+
+
+# Schema for Participant Update
+class ParticipantUpdate(SQLModel):
+    user_id: int
+    # share_amount: Optional[float] = None # For now, shares will be recalculated equally
+
+
+# Schemas for reading participant details with shares
+class ExpenseParticipantBase(SQLModel): # Base for ExpenseParticipant data
+    user_id: int
+    expense_id: int
+    share_amount: Optional[float]
+
+class ExpenseParticipantRead(ExpenseParticipantBase): # Reading an ExpenseParticipant link
+    # No extra fields needed if ExpenseParticipantBase is sufficient
+    pass
+
+class ExpenseParticipantReadWithUser(ExpenseParticipantRead): # Reading an ExpenseParticipant link with User details
+    user: UserRead
 
 
 # Schemas with Relationships (for responses)

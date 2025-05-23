@@ -75,7 +75,7 @@ async def test_create_user_duplicate_username(client: AsyncClient):
 async def test_read_user_not_found(client: AsyncClient):
     response = await client.get("/api/v1/users/99999")  # Non-existent user ID
     assert response.status_code == status.HTTP_404_NOT_FOUND
-    assert response.json()["detail"] == "User not found"
+    assert response.json()["detail"] == "User with id 99999 not found"
 
 
 @pytest.mark.asyncio
