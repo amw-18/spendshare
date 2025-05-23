@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Expense Tracker{% endblock %}
+
+{% block content %}
+<h1>Dashboard</h1>
+<p>Welcome, {{ user.username if user else "Guest" }}!</p> <!-- Assuming 'user' object is passed -->
+
+<h2>Users</h2>
+{% if users %}
+    <ul>
+        {% for u in users %}
+        <li>{{ u.username }} ({{ u.email }})</li>
+        {% endfor %}
+    </ul>
+{% else %}
+    <p>No other users found.</p>
+{% endif %}
+
+<h2>Groups</h2>
+{% if groups %}
+    <ul>
+        {% for group in groups %}
+        <li>
+            <a href="{{ url_for('get_group_page', group_id=group.id) }}">{{ group.name }}</a>
+            (Owned by: {{ group.creator.username if group.creator else "N/A" }})
+        </li>
+        {% endfor %}
+    </ul>
+{% else %}
+    <p>No groups found. Why not create one?</p>
+{% endif %}
+
+<h2>Create New Group</h2>
+<form action="{{ url_for('handle_create_group') }}" method="post">
+    <div>
+        <label for="group_name">Group Name:</label>
+        <input type="text" id="group_name" name="group_name" required>
+    </div>
+    <div>
+        <label for="group_description">Description:</label>
+        <textarea id="group_description" name="group_description"></textarea>
+    </div>
+    <!-- Assuming the creator_id will be handled server-side based on logged-in user -->
+    <button type="submit">Create Group</button>
+</form>
+{% endblock %}

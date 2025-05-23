@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Expense Tracker{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/styles.css') }}">
+    <style> /* Basic styling for messages */
+        .message { padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; }
+        .message.success { background-color: #d4edda; color: #155724; border-color: #c3e6cb; }
+        .message.error { background-color: #f8d7da; color: #721c24; border-color: #f5c6cb; }
+    </style>
+    {% block head_extra %}{% endblock %}
+</head>
+<body>
+    <nav>
+        <a href="{{ url_for('get_home_page') }}">Home</a> |
+        <a href="{{ url_for('get_dashboard_page') }}">Dashboard</a> |
+        {% if request.cookies.get("fake_session_user_id") %}
+            <a href="{{ url_for('handle_logout') }}">Logout</a>
+        {% else %}
+            <a href="{{ url_for('get_signup_page') }}">Sign Up</a> |
+            <a href="{{ url_for('get_login_page') }}">Login</a>
+        {% endif %}
+    </nav>
+    <hr>
+    <main>
+        {% if request.query_params.get("message") %}
+            <div class="message success">{{ request.query_params.get("message") }}</div>
+        {% endif %}
+        {% if request.query_params.get("error") %}
+            <div class="message error">{{ request.query_params.get("error") }}</div>
+        {% endif %}
+        {% block content %}{% endblock %}
+    </main>
+    <footer>
+        <p>&copy; 2023 Expense Tracker</p>
+    </footer>
+    {% block scripts_extra %}{% endblock %}
+</body>
+</html>

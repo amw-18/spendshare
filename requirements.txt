@@ -11,3 +11,5 @@ python-jose[cryptography]
 # asyncpg # For PostgreSQL async (if used later)
 # mysqlclient # For MySQL (if used later)
 # aiomysql # For MySQL async (if used later)
+jinja2
+python-multipart
