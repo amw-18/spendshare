@@ -1,25 +1,26 @@
 from typing import List, Optional, Dict
-from sqlmodel.ext.asyncio.session import AsyncSession # Use AsyncSession
+from sqlmodel.ext.asyncio.session import AsyncSession  # Use AsyncSession
 
 from app.models.models import Expense, User, Group
 from app.models.schemas import ExpenseCreate
-from app.crud import crud_expense, crud_user, crud_group # These are now async modules
+from app.crud import crud_expense, crud_user, crud_group  # These are now async modules
 
-async def create_expense_with_participants( # async def
-    session: AsyncSession, # AsyncSession
+
+async def create_expense_with_participants(  # async def
+    session: AsyncSession,  # AsyncSession
     *,
     expense_in: ExpenseCreate,
     paid_by_user_id: int,
     participant_user_ids: List[int],
-    group_id: Optional[int] = None
+    group_id: Optional[int] = None,
 ) -> Optional[Expense]:
     # Verify paid_by_user exists
-    payer = await crud_user.get_user(session, paid_by_user_id) # await
+    payer = await crud_user.get_user(session, paid_by_user_id)
     if not payer:
-        return None 
-    
+        return None
+
     if group_id:
-        group = await crud_group.get_group(session, group_id) # await
+        group = await crud_group.get_group(session, group_id)
         if not group:
             return None
 
@@ -29,7 +30,7 @@ async def create_expense_with_participants( # async def
         users_sharing_expense_ids.add(paid_by_user_id)
 
     for user_id in users_sharing_expense_ids:
-        user = await crud_user.get_user(session, user_id) # await
+        user = await crud_user.get_user(session, user_id)
         if not user:
             return None
         all_participants_in_expense_users.append(user)
@@ -37,38 +38,38 @@ async def create_expense_with_participants( # async def
     if not all_participants_in_expense_users:
         return None
 
-    expense_data_for_creation = expense_in.model_copy(update={
-        "paid_by_user_id": paid_by_user_id,
-        "group_id": group_id
-    })
-    
-    # The crud_expense.create_expense now expects paid_by_user_id as part of its own signature
-    # in addition to being in expense_in. Let's align with the crud function signature.
-    db_expense = await crud_expense.create_expense( # await
-        session=session, 
-        expense_in=expense_data_for_creation, 
-        paid_by_user_id=paid_by_user_id # Pass it as per crud_expense.create_expense signature
+    expense_data_for_creation = expense_in.model_copy(
+        update={"paid_by_user_id": paid_by_user_id, "group_id": group_id}
+    )
+
+    db_expense = await crud_expense.create_expense(
+        session=session, expense_in=expense_data_for_creation
     )
     if not db_expense:
         return None
 
     num_participants = len(all_participants_in_expense_users)
-    share_amount = None 
+    share_amount = None
     if num_participants > 0:
         share_amount = round(db_expense.amount / num_participants, 2)
 
     for user_obj in all_participants_in_expense_users:
-        await crud_expense.add_participant_to_expense( # await
+        await crud_expense.add_participant_to_expense(
             session=session,
             expense_id=db_expense.id,
             user_id=user_obj.id,
-            share_amount=share_amount
+            share_amount=share_amount,
         )
-    
-    await session.refresh(db_expense) # Ensure expense object is up-to-date after adding participants
+
+    await session.refresh(
+        db_expense
+    )  # Ensure expense object is up-to-date after adding participants
     return db_expense
 
-async def get_user_balances(session: AsyncSession, user_id: int) -> Dict[str, float]: # async def
+
+async def get_user_balances(
+    session: AsyncSession, user_id: int
+) -> Dict[str, float]:  # async def
     # This function will involve async calls to CRUD operations to fetch expenses
     # For now, it remains a placeholder but is marked async.
     # Example:
