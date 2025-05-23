@@ -1,21 +1,22 @@
 from typing import List, Optional
 from sqlmodel.ext.asyncio.session import AsyncSession # Use AsyncSession
 from sqlmodel import select # select is still used the same way
-from passlib.context import CryptContext
 
+# Import password hashing utilities from the new core.security module
+from app.core.security import get_password_hash, verify_password
 from app.models.models import User
 from app.models.schemas import UserCreate, UserUpdate
 
 # pwd_context and its helper functions (get_password_hash, verify_password)
 # are synchronous and CPU-bound, so they don't need to be async.
 # They will be moved to a core.security module later as planned.
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto") # Removed
 
-def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+# def get_password_hash(password: str) -> str: # Removed
+#     return pwd_context.hash(password)
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+# def verify_password(plain_password: str, hashed_password: str) -> bool: # Removed
+#     return pwd_context.verify(plain_password, hashed_password)
 
 async def create_user(session: AsyncSession, *, user_in: UserCreate) -> User:
     hashed_password = get_password_hash(user_in.password)
