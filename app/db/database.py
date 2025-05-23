@@ -5,7 +5,7 @@ from sqlmodel import SQLModel
 from sqlalchemy.orm import sessionmaker
 
 # Use aiosqlite for async SQLite connection
-ASYNC_DATABASE_URL = "sqlite+aiosqlite:///./test_async.db"
+ASYNC_DATABASE_URL = "sqlite+aiosqlite:///./main.db"
 # Note: The connect_args={"check_same_thread": False} is specific to SQLite's default driver
 # and is not needed or used by aiosqlite in the same way. aiosqlite handles concurrency properly.
 
