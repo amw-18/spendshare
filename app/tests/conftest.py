@@ -25,6 +25,9 @@ TestingSessionLocal = sessionmaker(
 )
 
 
+from app.models.models import User # Added User model
+from app.core.security import get_password_hash # Added get_password_hash
+
 # Fixture to override the get_session dependency in the main app
 async def override_get_session() -> AsyncGenerator[AsyncSession, None]:
     async with TestingSessionLocal() as session:
@@ -56,3 +59,53 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     # However, with db_setup_session as autouse=True and scope="session", tables are handled globally.
     async with AsyncClient(transport=ASGITransport(app), base_url="http://test") as ac:
         yield ac
+
+
+# User Fixtures
+@pytest_asyncio.fixture
+async def normal_user(session: AsyncSession = TestingSessionLocal()) -> User: # Use TestingSessionLocal directly for fixture setup
+    async with session.begin(): # Ensure session is active for db operations
+        user = User(
+            username="testuser",
+            email="testuser@example.com",
+            hashed_password=get_password_hash("password123"),
+            is_admin=False,
+        )
+        session.add(user)
+    await session.commit() # Commit the user to the database
+    await session.refresh(user) # Refresh to get ID and other defaults
+    return user
+
+@pytest_asyncio.fixture
+async def admin_user(session: AsyncSession = TestingSessionLocal()) -> User:
+    async with session.begin():
+        admin = User(
+            username="adminuser",
+            email="adminuser@example.com",
+            hashed_password=get_password_hash("password123"),
+            is_admin=True,
+        )
+        session.add(admin)
+    await session.commit()
+    await session.refresh(admin)
+    return admin
+
+
+# Token Fixtures
+@pytest_asyncio.fixture
+async def normal_user_token_headers(client: AsyncClient, normal_user: User) -> dict[str, str]:
+    login_data = {"username": normal_user.username, "password": "password123"}
+    res = await client.post("/api/v1/users/token", data=login_data)
+    if res.status_code != 200:
+        pytest.fail(f"Failed to log in normal_user. Status: {res.status_code}, Response: {res.text}")
+    token = res.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+@pytest_asyncio.fixture
+async def admin_user_token_headers(client: AsyncClient, admin_user: User) -> dict[str, str]:
+    login_data = {"username": admin_user.username, "password": "password123"}
+    res = await client.post("/api/v1/users/token", data=login_data)
+    if res.status_code != 200:
+        pytest.fail(f"Failed to log in admin_user. Status: {res.status_code}, Response: {res.text}")
+    token = res.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
