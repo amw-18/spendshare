@@ -36,11 +36,11 @@ async def get_expenses_for_user(
     # Expenses where the user is the payer OR a participant.
 
     # Paid by user:
-    stmt_paid_by = select(Expense).where(Expense.paid_by_user_id == user_id)
+    stmt_paid_by = select(Expense.id).where(Expense.paid_by_user_id == user_id)
 
     # Participated by user:
     stmt_participated_in = (
-        select(Expense)
+        select(Expense.id)
         .join(ExpenseParticipant, Expense.id == ExpenseParticipant.expense_id)
         .where(ExpenseParticipant.user_id == user_id)
     )
@@ -50,10 +50,8 @@ async def get_expenses_for_user(
         .distinct()
         .where(
             or_(
-                Expense.id.in_(select(stmt_paid_by.with_only_columns(Expense.id))),
-                Expense.id.in_(
-                    select(stmt_participated_in.with_only_columns(Expense.id))
-                ),
+                Expense.id.in_(stmt_paid_by),
+                Expense.id.in_(stmt_participated_in),
             )
         )
         .offset(skip)

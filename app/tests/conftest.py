@@ -26,7 +26,7 @@ TestingSessionLocal = sessionmaker(
 
 
 # Fixture to override the get_session dependency in the main app
-async def override_get_session() -> AsyncGenerator[AsyncSession]:
+async def override_get_session() -> AsyncGenerator[AsyncSession, None]:
     async with TestingSessionLocal() as session:
         yield session
 
@@ -51,7 +51,7 @@ async def db_setup_session():
 @pytest_asyncio.fixture(
     scope="function"
 )  # "function" scope for client to ensure clean state per test
-async def client() -> AsyncGenerator[AsyncClient]:
+async def client() -> AsyncGenerator[AsyncClient, None]:
     # We need to ensure tables are created before client is used if db_setup_session isn't session-scoped autouse
     # However, with db_setup_session as autouse=True and scope="session", tables are handled globally.
     async with AsyncClient(transport=ASGITransport(app), base_url="http://test") as ac:

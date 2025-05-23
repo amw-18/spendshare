@@ -19,23 +19,12 @@ async def create_expense_with_participants_endpoint(
     *,
     session: AsyncSession = Depends(get_session),
     expense_in: schemas.ExpenseCreate,
-    paid_by_user_id: int = Body(...),
     participant_user_ids: List[int] = Body(...),
-    group_id: Optional[int] = Body(None),
 ) -> models.Expense:
-    populated_expense_in = schemas.ExpenseCreate(
-        description=expense_in.description,
-        amount=expense_in.amount,
-        paid_by_user_id=paid_by_user_id,
-        group_id=group_id,
-    )
-
     db_expense = await expense_service.create_expense_with_participants(
         session=session,
-        expense_in=populated_expense_in,
-        paid_by_user_id=paid_by_user_id,
+        expense_in=expense_in,
         participant_user_ids=participant_user_ids,
-        group_id=group_id,
     )
     if not db_expense:
         raise HTTPException(
@@ -81,11 +70,11 @@ async def read_expenses_endpoint(
     group_id: Optional[int] = None,
 ) -> List[models.Expense]:
     if user_id:
-        expenses = await crud_expense.get_expenses_for_user(  # await
+        expenses = await crud_expense.get_expenses_for_user(
             session=session, user_id=user_id, skip=skip, limit=limit
         )
     elif group_id:
-        expenses = await crud_expense.get_expenses_for_group(  # await
+        expenses = await crud_expense.get_expenses_for_group(
             session=session, group_id=group_id, skip=skip, limit=limit
         )
     else:
@@ -155,28 +144,6 @@ async def delete_expense_endpoint(
         raise HTTPException(status_code=404, detail="Expense not found")
     await crud_expense.delete_expense(session=session, db_expense=db_expense)
     return expense_id
-
-
-@router.post("/{expense_id}/participants/{user_id}", response_model=schemas.ExpenseRead)
-async def add_expense_participant_endpoint(
-    *,
-    session: AsyncSession = Depends(get_session),
-    expense_id: int,
-    user_id: int,
-    share_amount: Optional[float] = Body(None),
-):
-    updated_expense = await crud_expense.add_participant_to_expense(
-        session=session,
-        expense_id=expense_id,
-        user_id=user_id,
-        share_amount=share_amount,
-    )
-    if not updated_expense:
-        raise HTTPException(
-            status_code=404,
-            detail="Expense or User not found, or participant could not be added.",
-        )
-    return updated_expense
 
 
 @router.delete(

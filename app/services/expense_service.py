@@ -10,24 +10,22 @@ async def create_expense_with_participants(  # async def
     session: AsyncSession,  # AsyncSession
     *,
     expense_in: ExpenseCreate,
-    paid_by_user_id: int,
     participant_user_ids: List[int],
-    group_id: Optional[int] = None,
 ) -> Optional[Expense]:
     # Verify paid_by_user exists
-    payer = await crud_user.get_user(session, paid_by_user_id)
+    payer = await crud_user.get_user(session, expense_in.paid_by_user_id)
     if not payer:
         return None
 
-    if group_id:
-        group = await crud_group.get_group(session, group_id)
+    if expense_in.group_id:
+        group = await crud_group.get_group(session, expense_in.group_id)
         if not group:
             return None
 
     all_participants_in_expense_users = []
     users_sharing_expense_ids = set(participant_user_ids)
     if not participant_user_ids:
-        users_sharing_expense_ids.add(paid_by_user_id)
+        users_sharing_expense_ids.add(expense_in.paid_by_user_id)
 
     for user_id in users_sharing_expense_ids:
         user = await crud_user.get_user(session, user_id)
@@ -38,12 +36,8 @@ async def create_expense_with_participants(  # async def
     if not all_participants_in_expense_users:
         return None
 
-    expense_data_for_creation = expense_in.model_copy(
-        update={"paid_by_user_id": paid_by_user_id, "group_id": group_id}
-    )
-
     db_expense = await crud_expense.create_expense(
-        session=session, expense_in=expense_data_for_creation
+        session=session, expense_in=expense_in
     )
     if not db_expense:
         return None
