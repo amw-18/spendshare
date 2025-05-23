@@ -51,7 +51,7 @@ This project uses `uv` for managing the Python environment and dependencies.
 4.  **Install Dependencies**:
     With the virtual environment activated:
     ```bash
-    uv pip install -r requirements.txt
+    uv sync
     ```
 
 ## Running the Application
