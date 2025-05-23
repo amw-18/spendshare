@@ -90,7 +90,5 @@ This will discover and run all tests in the `app/tests` directory. Make sure the
 │   │   ├── conftest.py   # Pytest fixtures and test configuration
 │   │   └── test_*.py     # Test files
 │   └── main.py           # FastAPI application entry point
-├── requirements.txt      # Project dependencies
-├── uv_setup_guide.md     # Detailed uv setup guide (supplements this README)
 └── README.md             # This file
 ```
