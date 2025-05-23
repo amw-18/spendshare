@@ -1,29 +1,33 @@
-from sqlmodel import SQLModel, create_engine
+from sqlmodel.ext.asyncio.session import AsyncSession # For AsyncSession
+from sqlalchemy.ext.asyncio import create_async_engine # For create_async_engine
+from sqlmodel import SQLModel # Still needed for SQLModel.metadata
+from sqlalchemy.orm import sessionmaker # For sessionmaker
 
-# For SQLite, the URL starts with sqlite:///
-# For local development, we'll use a file-based SQLite database.
-DATABASE_URL = "sqlite:///./test.db" 
-# Later, this can be changed to your MySQL connection string, e.g.:
-# MYSQL_USER = "your_user"
-# MYSQL_PASSWORD = "your_password"
-# MYSQL_SERVER = "your_server"
-# MYSQL_DB = "your_db"
-# DATABASE_URL = f"mysql+mysqlclient://{MYSQL_USER}:{MYSQL_PASSWORD}@{MYSQL_SERVER}/{MYSQL_DB}"
+# Use aiosqlite for async SQLite connection
+ASYNC_DATABASE_URL = "sqlite+aiosqlite:///./test_async.db" 
+# Note: The connect_args={"check_same_thread": False} is specific to SQLite's default driver
+# and is not needed or used by aiosqlite in the same way. aiosqlite handles concurrency properly.
 
+async_engine = create_async_engine(ASYNC_DATABASE_URL, echo=True, future=True)
+# `future=True` enables the newer SQLAlchemy 2.0 style execution model which is preferred.
 
-# The connect_args is needed only for SQLite to allow multiple threads to access the same connection.
-# This is relevant for FastAPI's background tasks or when running in a multithreaded server.
-engine = create_engine(DATABASE_URL, echo=True, connect_args={"check_same_thread": False})
+async def create_db_and_tables():
+    async with async_engine.begin() as conn:
+        # await conn.run_sync(SQLModel.metadata.drop_all) # Optional: drop tables first
+        await conn.run_sync(SQLModel.metadata.create_all)
 
-def create_db_and_tables():
-    # This function will create all tables in the database
-    # based on the SQLModel models that have been defined.
-    # It should be called once when the application starts.
-    SQLModel.metadata.create_all(engine)
+async def get_session() -> AsyncSession: # Note the return type hint
+    # The sessionmaker should be configured for AsyncSession
+    async_session_maker = sessionmaker(
+        bind=async_engine, class_=AsyncSession, expire_on_commit=False
+    )
+    async with async_session_maker() as session:
+        yield session
 
-# It's also common to have a function to get a database session for dependency injection in FastAPI routes
-# from sqlmodel import Session
-# def get_session():
-#     with Session(engine) as session:
-#         yield session
-# We will add this later when we implement the routers.
+# If you need a synchronous engine for any reason (e.g., Alembic migrations not yet async-compatible),
+# you might keep it, but primary operations should use the async_engine.
+# For this project, we'll aim for full async.
+# SYNC_DATABASE_URL = "sqlite:///./test_sync.db"
+# sync_engine = create_engine(SYNC_DATABASE_URL, echo=True, connect_args={"check_same_thread": False})
+# def create_sync_db_and_tables():
+# SQLModel.metadata.create_all(sync_engine)
