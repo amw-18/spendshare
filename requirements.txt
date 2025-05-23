@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+sqlmodel>=0.0.14
+aiosqlite
+httpx
+pytest
+pytest-asyncio
+passlib[bcrypt]
+python-jose[cryptography]
+# psycopg2-binary # For PostgreSQL (if used later)
+# asyncpg # For PostgreSQL async (if used later)
+# mysqlclient # For MySQL (if used later)
+# aiomysql # For MySQL async (if used later)
