@@ -1,13 +1,14 @@
 from typing import List, Optional # Removed Any
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException, Body, status # Added status
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import select, delete
 from sqlalchemy import or_
 
 from app.db.database import get_session
 from app.models import models # Used as models.Expense in type hints
-from app.models.models import Expense, User, Group, ExpenseParticipant
+from app.models.models import Expense, User, Group, ExpenseParticipant # User is imported here
 from app.models import schemas
+from app.core.security import get_current_user # Added get_current_user
 from app.utils import get_object_or_404 # Removed get_optional_object_by_attribute
 
 router = APIRouter(
@@ -22,9 +23,10 @@ async def create_expense_with_participants_endpoint(
     session: AsyncSession = Depends(get_session),
     expense_in: schemas.ExpenseCreate,
     participant_user_ids: List[int] = Body(...),
+    current_user: models.User = Depends(get_current_user),
 ) -> models.Expense:
     # Inline expense_service.create_expense_with_participants
-    payer = await get_object_or_404(session, User, expense_in.paid_by_user_id)
+    # payer = await get_object_or_404(session, User, expense_in.paid_by_user_id) # Removed, will use current_user
 
     if expense_in.group_id:
         group = await get_object_or_404(session, Group, expense_in.group_id)
@@ -34,7 +36,7 @@ async def create_expense_with_participants_endpoint(
     all_participants_in_expense_users = []
     users_sharing_expense_ids = set(participant_user_ids)
     if not participant_user_ids: # If list is empty, payer is the only participant
-        users_sharing_expense_ids.add(expense_in.paid_by_user_id)
+        users_sharing_expense_ids.add(current_user.id) # Use current_user.id
 
     for user_id_in_set in users_sharing_expense_ids:
         user = await get_object_or_404(session, User, user_id_in_set)
@@ -45,7 +47,7 @@ async def create_expense_with_participants_endpoint(
         raise HTTPException(status_code=400, detail="No participants specified for the expense.")
 
     # Create the expense (formerly crud_expense.create_expense)
-    db_expense = Expense.model_validate(expense_in)
+    db_expense = Expense.model_validate(expense_in, update={"paid_by_user_id": current_user.id})
     session.add(db_expense)
     await session.commit()
     await session.refresh(db_expense) # Refresh to get db_expense.id
@@ -73,15 +75,15 @@ async def create_expense_with_participants_endpoint(
 
 @router.post("/", response_model=schemas.ExpenseRead)
 async def create_expense_endpoint(
-    *, session: AsyncSession = Depends(get_session), expense_in: schemas.ExpenseCreate
+    *, session: AsyncSession = Depends(get_session), expense_in: schemas.ExpenseCreate, current_user: models.User = Depends(get_current_user)
 ) -> models.Expense:
-    payer = await get_object_or_404(session, User, expense_in.paid_by_user_id)
+    # payer = await get_object_or_404(session, User, expense_in.paid_by_user_id) # Removed, will use current_user
 
     if expense_in.group_id:
         await get_object_or_404(session, Group, expense_in.group_id) # Check existence
 
     # Inline crud_expense.create_expense
-    db_expense = Expense.model_validate(expense_in) # Changed from Expense(**expense_in.dict())
+    db_expense = Expense.model_validate(expense_in, update={"paid_by_user_id": current_user.id}) # Changed from Expense(**expense_in.dict())
     session.add(db_expense)
     await session.commit()
     await session.refresh(db_expense)
@@ -98,6 +100,7 @@ async def read_expenses_endpoint(
     limit: int = 100,
     user_id: Optional[int] = None,
     group_id: Optional[int] = None,
+    current_user: models.User = Depends(get_current_user),
 ) -> List[models.Expense]:
     statement = select(Expense)
     if user_id:
@@ -131,11 +134,25 @@ async def read_expenses_endpoint(
 
 @router.get("/{expense_id}", response_model=schemas.ExpenseRead)
 async def read_expense_endpoint(
-    *, session: AsyncSession = Depends(get_session), expense_id: int
-) -> models.Expense:
-    db_expense = await get_object_or_404(session, Expense, expense_id)
+    *, session: AsyncSession = Depends(get_session), expense_id: int, current_user: models.User = Depends(get_current_user)
+) -> models.Expense: # Keep models.Expense as per original, though schemas.ExpenseRead is what's returned
+    db_expense_obj = await get_object_or_404(session, Expense, expense_id)
+
+    if not current_user.is_admin and db_expense_obj.paid_by_user_id != current_user.id:
+        # Check if current_user is a participant in the expense
+        participant_exists_statement = select(ExpenseParticipant).where(
+            ExpenseParticipant.expense_id == expense_id,
+            ExpenseParticipant.user_id == current_user.id,
+        )
+        result = await session.exec(participant_exists_statement)
+        if not result.first():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to view this expense",
+            )
+    
     # Manually construct and return ExpenseRead with participant_details
-    return await _get_expense_read_details(session=session, db_expense=db_expense)
+    return await _get_expense_read_details(session=session, db_expense=db_expense_obj)
 
 
 @router.put("/{expense_id}", response_model=schemas.ExpenseRead)
@@ -144,6 +161,7 @@ async def update_expense_endpoint(
     session: AsyncSession = Depends(get_session),
     expense_id: int,
     expense_in: schemas.ExpenseUpdate,
+    current_user: models.User = Depends(get_current_user),
 ) -> models.Expense:
     db_expense = await get_object_or_404(session, Expense, expense_id)
 
@@ -246,9 +264,12 @@ async def update_expense_endpoint(
 
 @router.delete("/{expense_id}", response_model=int)
 async def delete_expense_endpoint(
-    *, session: AsyncSession = Depends(get_session), expense_id: int
+    *, session: AsyncSession = Depends(get_session), expense_id: int, current_user: models.User = Depends(get_current_user)
 ) -> int:
     db_expense = await get_object_or_404(session, Expense, expense_id)
+
+    if not current_user.is_admin and db_expense.paid_by_user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to delete this expense")
 
     # Inline crud_expense.delete_expense
     # First, delete related ExpenseParticipant entries

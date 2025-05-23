@@ -1,12 +1,13 @@
 from typing import List, Optional # Consolidated and removed Any
-from fastapi import APIRouter, Depends, HTTPException # Removed Body
+from fastapi import APIRouter, Depends, HTTPException, status # Added status
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import select
 
 from app.db.database import get_session
 from app.models import models # Used as models.Group in type hints
-from app.models.models import Group, User, UserGroupLink
+from app.models.models import Group, User, UserGroupLink # User is imported here
 from app.models import schemas
+from app.core.security import get_current_user # Added get_current_user
 from app.utils import get_object_or_404 # Removed get_optional_object_by_attribute
 
 router = APIRouter(
@@ -20,17 +21,13 @@ async def create_group_endpoint(
     *,
     session: AsyncSession = Depends(get_session),
     group_in: schemas.GroupCreate,
+    current_user: models.User = Depends(get_current_user),
 ) -> models.Group:
-    creator = await get_object_or_404(session, User, group_in.created_by_user_id)
-    # The detail message in get_object_or_404 is generic, e.g. "User with id X not found"
-    # If "Creator user not found." is specifically required, custom logic would be needed here.
-    # For this refactoring, we'll accept the generic message from the utility.
-
     # Logic from crud_group.create_group
     db_group = Group(
         name=group_in.name,
         description=group_in.description,
-        created_by_user_id=group_in.created_by_user_id,
+        created_by_user_id=current_user.id, # Use current_user.id
     )
     session.add(db_group)
     await session.commit()
@@ -38,9 +35,9 @@ async def create_group_endpoint(
 
     # Automatically add the creator as a member
     # Ensure db_group.id is populated after refresh
-    if db_group.id is not None and db_group.created_by_user_id is not None:
+    if db_group.id is not None: # current_user.id will always be not None
         creator_as_member_link = UserGroupLink(
-            user_id=db_group.created_by_user_id, group_id=db_group.id
+            user_id=current_user.id, group_id=db_group.id # Use current_user.id
         )
         session.add(creator_as_member_link)
         await session.commit()
@@ -52,7 +49,7 @@ async def create_group_endpoint(
 
 @router.get("/", response_model=List[schemas.GroupRead])
 async def read_groups_endpoint(
-    *, session: AsyncSession = Depends(get_session), skip: int = 0, limit: int = 100
+    *, session: AsyncSession = Depends(get_session), skip: int = 0, limit: int = 100, current_user: models.User = Depends(get_current_user)
 ) -> List[models.Group]:
     # Logic from crud_group.get_groups
     statement = select(Group).offset(skip).limit(limit)
@@ -63,9 +60,21 @@ async def read_groups_endpoint(
 
 @router.get("/{group_id}", response_model=schemas.GroupRead)
 async def read_group_endpoint(
-    *, session: AsyncSession = Depends(get_session), group_id: int
+    *, session: AsyncSession = Depends(get_session), group_id: int, current_user: models.User = Depends(get_current_user)
 ) -> models.Group:
     db_group = await get_object_or_404(session, Group, group_id)
+
+    if not current_user.is_admin and db_group.created_by_user_id != current_user.id:
+        # Check if current_user is a member of the group
+        link_exists_statement = select(UserGroupLink).where(
+            UserGroupLink.group_id == group_id, UserGroupLink.user_id == current_user.id
+        )
+        result = await session.exec(link_exists_statement)
+        if not result.first():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to view this group",
+            )
     return db_group
 
 
@@ -75,6 +84,7 @@ async def update_group_endpoint(
     session: AsyncSession = Depends(get_session),
     group_id: int,
     group_in: schemas.GroupUpdate,
+    current_user: models.User = Depends(get_current_user),
 ) -> models.Group:
     db_group = await get_object_or_404(session, Group, group_id)
 
@@ -94,8 +104,12 @@ async def delete_group_endpoint(
     *,
     session: AsyncSession = Depends(get_session),
     group_id: int,
+    current_user: models.User = Depends(get_current_user),
 ) -> int:
     db_group = await get_object_or_404(session, Group, group_id)
+
+    if not current_user.is_admin and db_group.created_by_user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to delete this group")
 
     # Logic from crud_group.delete_group
     # Need to ensure related UserGroupLink entries are handled if necessary,
@@ -114,6 +128,7 @@ async def add_group_member_endpoint(
     session: AsyncSession = Depends(get_session),
     group_id: int,
     user_id: int,
+    current_user: models.User = Depends(get_current_user),
 ) -> models.Group:
     db_group = await get_object_or_404(session, Group, group_id)
     user_to_add = await get_object_or_404(session, User, user_id)
@@ -161,6 +176,7 @@ async def remove_group_member_endpoint(
     session: AsyncSession = Depends(get_session),
     group_id: int,
     user_id: int,
+    current_user: models.User = Depends(get_current_user),
 ) -> models.Group:
     db_group = await get_object_or_404(session, Group, group_id)
     user_to_remove = await get_object_or_404(session, User, user_id)

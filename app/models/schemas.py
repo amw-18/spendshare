@@ -1,6 +1,13 @@
 from typing import List, Optional
 from sqlmodel import SQLModel
 from datetime import datetime
+from pydantic import BaseModel
+
+
+# Token Schema
+class Token(BaseModel):
+    access_token: str
+    token_type: str
 
 
 # User Schemas
@@ -15,12 +22,14 @@ class UserCreate(UserBase):
 
 class UserRead(UserBase):
     id: int
+    is_admin: bool
 
 
 class UserUpdate(SQLModel):
     username: Optional[str] = None
     email: Optional[str] = None
     password: Optional[str] = None
+    is_admin: Optional[bool] = None
 
 
 # Group Schemas
@@ -30,7 +39,7 @@ class GroupBase(SQLModel):
 
 
 class GroupCreate(GroupBase):
-    created_by_user_id: int  # Keep this simple for creation
+    pass  # created_by_user_id will be set from current_user
 
 
 class GroupRead(GroupBase):
@@ -46,7 +55,7 @@ class GroupUpdate(SQLModel):
 class ExpenseBase(SQLModel):
     description: str
     amount: float
-    paid_by_user_id: int
+    # paid_by_user_id: int # Will be set from current_user
     group_id: Optional[int] = None
 
 
@@ -54,6 +63,7 @@ class ExpenseCreate(ExpenseBase):
     # For creating an expense, we might want to specify participants and their shares
     # This can get complex, so for now, let's assume a simple model.
     # Advanced: participants: Optional[List[Tuple[int, Optional[float]]]] = None # List of (user_id, share_amount)
+    # paid_by_user_id is removed from ExpenseBase and thus not here.
     pass
 
 

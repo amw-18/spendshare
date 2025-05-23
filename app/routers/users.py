@@ -1,12 +1,13 @@
 from typing import List, Optional # Consolidated and removed Any
-from fastapi import APIRouter, Depends, HTTPException # Removed Body
+from fastapi import APIRouter, Depends, HTTPException, status # Removed Body, Added status
+from fastapi.security import OAuth2PasswordRequestForm # Added OAuth2PasswordRequestForm
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import select
 
 from app.db.database import get_session
 from app.models import models # Used as models.User in type hints
 from app.models import schemas
-from app.core.security import get_password_hash
+from app.core.security import get_password_hash, verify_password, create_access_token, get_current_user # Added verify_password, create_access_token, get_current_user
 from app.models.models import User # Used for User object, e.g. User(...)
 from app.utils import get_object_or_404, get_optional_object_by_attribute
 
@@ -55,7 +56,13 @@ async def read_users_endpoint(
     session: AsyncSession = Depends(get_session),
     skip: int = 0,
     limit: int = 100,
+    current_user: models.User = Depends(get_current_user),
 ) -> List[models.User]:
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to list users",
+        )
     # Logic from crud_user.get_users
     statement = select(User).offset(skip).limit(limit)
     result = await session.exec(statement)
@@ -65,7 +72,7 @@ async def read_users_endpoint(
 
 @router.get("/{user_id}", response_model=schemas.UserRead)
 async def read_user_endpoint(
-    *, session: AsyncSession = Depends(get_session), user_id: int
+    *, session: AsyncSession = Depends(get_session), user_id: int, current_user: models.User = Depends(get_current_user)
 ) -> models.User:
     db_user = await get_object_or_404(session, User, user_id)
     return db_user
@@ -77,8 +84,23 @@ async def update_user_endpoint(
     session: AsyncSession = Depends(get_session),
     user_id: int,
     user_in: schemas.UserUpdate,
+    current_user: models.User = Depends(get_current_user),
 ) -> models.User:
-    db_user = await get_object_or_404(session, User, user_id)
+    db_user = await get_object_or_404(session, User, user_id) # This is the user to be updated
+
+    # Authorization check: Only admin or the user themselves can update
+    if not current_user.is_admin and current_user.id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this user account")
+
+    # Authorization check: Prevent non-admins from granting admin privileges
+    if user_in.is_admin is not None and user_in.is_admin == True and not current_user.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to grant admin privileges")
+    
+    # Prevent users from revoking their own admin status if they are the sole admin
+    # This logic is more complex and might require a global check or be handled as a separate feature.
+    # For now, we'll allow an admin to revoke their own admin status if they choose to.
+    # However, if user_in.is_admin is False and current_user.id == user_id and current_user.is_admin:
+    #    pass # This case is allowed.
 
     if user_in.email:
         existing_user_email = await get_optional_object_by_attribute(session, User, "email", user_in.email)
@@ -95,10 +117,41 @@ async def update_user_endpoint(
     user_data = user_in.model_dump(exclude_unset=True)
     if user_data.get("password"):
         hashed_password = get_password_hash(user_data["password"])
-        user_data["password"] = hashed_password # Corrected: use user_data["password"] instead of user_data["hashed_password"]
+        user_data["password"] = hashed_password
 
+    # If is_admin is not part of the input (None), do not change it unless current_user is admin
+    # If current_user is not admin, they cannot change is_admin field AT ALL (already handled by the check above for True)
+    # If current_user is admin, they CAN change it.
+    # The user_data dictionary will contain 'is_admin' only if it was provided in the input.
+    # If 'is_admin' is not in user_data, it means it was not in user_in or was user_in.is_admin=None.
+    # If it is in user_data and current_user is not admin, it must be False or None (already checked for True).
+    # If user_in.is_admin is None, it's excluded by exclude_unset=True, so is_admin won't be in user_data.
+    # If user_in.is_admin is False, it will be in user_data.
+    # An admin can set another user's (or their own) admin status to False.
+    # A non-admin cannot set their own admin status to False if they are already admin (this is not possible as they are not admin).
+    # A non-admin cannot set their own admin status to True (already checked).
+    
+    # Update fields
     for key, value in user_data.items():
-        setattr(db_user, key, value)
+        # Special handling for is_admin: only allow if current_user is admin, or if user is de-adminning themselves (which is fine)
+        if key == "is_admin":
+            if current_user.is_admin: # Admin can set it to True or False
+                setattr(db_user, key, value)
+            # else: non-admin cannot change is_admin (already covered by earlier check if they try to set to True)
+            # If a non-admin tries to set is_admin to False, it's a no-op if they are not admin.
+            # If they are admin and set to False, it's allowed.
+            # The initial check `if user_in.is_admin is not None and user_in.is_admin == True and not current_user.is_admin:`
+            # already prevents non-admins from setting is_admin to True.
+            # So, if we reach here, and key is "is_admin", and current_user is not admin, value must be False.
+            # Setting their own (already False) is_admin to False is a no-op and fine.
+            # This means we only need to ensure that if `is_admin` is in `user_data`, it's applied correctly based on permissions.
+            # The current logic with `exclude_unset` and the top-level check for `is_admin == True` is mostly sufficient.
+            # However, to be explicit:
+            elif current_user.id == user_id and value == False: # User de-adminning themselves (if they were admin)
+                 setattr(db_user, key, value)
+            # Other cases for 'is_admin' by non-admins are effectively blocked or no-ops.
+        else:
+            setattr(db_user, key, value)
 
     session.add(db_user)
     await session.commit()
@@ -108,9 +161,60 @@ async def update_user_endpoint(
 
 @router.delete("/{user_id}", response_model=int)
 async def delete_user_endpoint(
-    *, session: AsyncSession = Depends(get_session), user_id: int
+    *, session: AsyncSession = Depends(get_session), user_id: int, current_user: models.User = Depends(get_current_user)
 ) -> int:
-    db_user = await get_object_or_404(session, User, user_id)
+    db_user = await get_object_or_404(session, User, user_id) # This is the user to be deleted
+
+    if not current_user.is_admin and current_user.id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to delete this user account")
+
     await session.delete(db_user)
     await session.commit()
     return user_id
+
+
+@router.post("/token", response_model=schemas.Token)
+async def login_for_access_token(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    session: AsyncSession = Depends(get_session)
+):
+    # Authenticate user (fetch user by username and verify password)
+    statement = select(User).where(User.username == form_data.username)
+    result = await session.exec(statement)
+    user = result.first()
+
+    if not user or not verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Create access token
+    access_token = create_access_token(
+        data={"sub": user.username, "user_id": user.id} # Add user_id to token payload
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+@router.post("/admin/login_as/{target_user_id}", response_model=schemas.Token)
+async def admin_login_as_user(
+    target_user_id: int,
+    current_user: models.User = Depends(get_current_user), # Ensures this endpoint is protected
+    session: AsyncSession = Depends(get_session),
+):
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized for this action",
+        )
+
+    target_user = await get_object_or_404(session, User, target_user_id)
+    
+    # Create access token for the target user
+    # Ensure the payload matches what get_current_user expects, e.g., 'sub' for username
+    # and potentially 'user_id'.
+    access_token = create_access_token(
+        data={"sub": target_user.username, "user_id": target_user.id}
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
