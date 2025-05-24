@@ -62,7 +62,6 @@ uvicorn app.main:app --reload --port 8000
 ```
 The API will be accessible at `http://localhost:8000`.
 Interactive API documentation (Swagger UI) will be available at `http://localhost:8000/docs`.
-Alternative API documentation (ReDoc) will be available at `http://localhost:8000/redoc`.
 
 ## Running Tests
 
@@ -79,16 +78,16 @@ This will discover and run all tests in the `app/tests` directory. Make sure the
 ## Project Structure (Overview)
 
 ```
-├── app/                  # Main application code
-│   ├── core/             # Core utilities (e.g., security)
-│   ├── crud/             # CRUD operations for database models
-│   ├── db/               # Database setup and session management
-│   ├── models/           # SQLModel definitions and Pydantic schemas
-│   ├── routers/          # API endpoint definitions (FastAPI routers)
-│   ├── services/         # Business logic layer
-│   ├── tests/            # Automated tests
-│   │   ├── conftest.py   # Pytest fixtures and test configuration
-│   │   └── test_*.py     # Test files
-│   └── main.py           # FastAPI application entry point
+/
+├── core/             # Core utilities (e.g., security)
+├── crud/             # CRUD operations for database models
+├── db/               # Database setup and session management
+├── models/           # SQLModel definitions and Pydantic schemas
+├── routers/          # API endpoint definitions (FastAPI routers)
+├── services/         # Business logic layer
+├── tests/            # Automated tests
+├── conftest.py       # Pytest fixtures and test configuration
+├── test_*.py         # Test files
+├── main.py           # FastAPI application entry point
 └── README.md             # This file
 ```

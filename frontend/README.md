@@ -1,11 +1,36 @@
-# React + TypeScript + Vite
+# SpendShare Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This is the frontend application for SpendShare, built with:
+- Vite
+- React
+- TypeScript
+- TailwindCSS
 
-Currently, two official plugins are available:
+## Prerequisites
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Node.js (LTS version recommended)
+- Yarn package manager
+
+## Development Setup
+
+1. Install dependencies:
+```bash
+yarn install
+```
+
+2. Start the development server:
+```bash
+yarn dev
+```
+
+The development server will start on http://localhost:5173
+
+## Available Scripts
+
+- `yarn dev` - Start the development server
+- `yarn build` - Build the production-ready application
+- `yarn preview` - Preview the production build locally
+- `yarn lint` - Run ESLint to check code quality
 
 ## Expanding the ESLint configuration
 
