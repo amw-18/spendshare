@@ -35,7 +35,7 @@ This project uses `uv` for managing the Python environment and dependencies.
 2.  **Clone the Repository**:
     ```bash
     git clone <your-repo-url>
-    cd <your-repo-name>
+    cd <your-repo-name>/app
     ```
 
 3.  **Create and Activate Virtual Environment**:
@@ -58,7 +58,7 @@ This project uses `uv` for managing the Python environment and dependencies.
 
 To run the development server:
 ```bash
-uvicorn app.main:app --reload --port 8000
+uvicorn src.main:app --reload --port 8000
 ```
 The API will be accessible at `http://localhost:8000`.
 Interactive API documentation (Swagger UI) will be available at `http://localhost:8000/docs`.
@@ -73,21 +73,4 @@ Or, using `uv`:
 ```bash
 uv run pytest
 ```
-This will discover and run all tests in the `app/tests` directory. Make sure the test database (`test_app_temp.db`) can be created in the root directory, or adjust its path in `app/tests/conftest.py` if needed.
-
-## Project Structure (Overview)
-
-```
-/
-├── core/             # Core utilities (e.g., security)
-├── crud/             # CRUD operations for database models
-├── db/               # Database setup and session management
-├── models/           # SQLModel definitions and Pydantic schemas
-├── routers/          # API endpoint definitions (FastAPI routers)
-├── services/         # Business logic layer
-├── tests/            # Automated tests
-├── conftest.py       # Pytest fixtures and test configuration
-├── test_*.py         # Test files
-├── main.py           # FastAPI application entry point
-└── README.md             # This file
-```
+This will discover and run all tests in the `app/src/tests` directory. Make sure the test database (`test_app_temp.db`) can be created in the root directory, or adjust its path in `app/src/tests/conftest.py` if needed.

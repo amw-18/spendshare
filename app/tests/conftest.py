@@ -1,15 +1,23 @@
-import pytest
-import os
 from typing import AsyncGenerator
+
+import pytest
 import pytest_asyncio  # For async fixtures
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import create_async_engine
-from sqlmodel import SQLModel, select, delete
-from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlalchemy.orm import sessionmaker
+from sqlmodel import SQLModel, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.main import app  # Your FastAPI application instance
-from app.db.database import get_session  # The overridden get_session for testing
+from src.db.database import get_session  # The overridden get_session for testing
+from src.main import app  # Your FastAPI application instance
+
+
+from src.core.security import get_password_hash  # Added get_password_hash
+from src.models.models import (
+    Expense,
+    ExpenseParticipant,
+    User,
+)  # Added Expense, ExpenseParticipant
 
 TEST_DATABASE_PATH = "./test_app_temp.db"
 # Use a separate SQLite database for testing
@@ -24,9 +32,6 @@ TestingSessionLocal = sessionmaker(
     bind=test_engine, class_=AsyncSession, expire_on_commit=False
 )
 
-
-from app.models.models import User, Expense, ExpenseParticipant # Added Expense, ExpenseParticipant
-from app.core.security import get_password_hash # Added get_password_hash
 
 # Fixture to override the get_session dependency in the main app
 async def override_get_session() -> AsyncGenerator[AsyncSession, None]:
@@ -74,28 +79,33 @@ async def normal_user() -> AsyncGenerator[User, None]:
         session.add(user)
         await session.commit()
         await session.refresh(user)
-        
+
         yield user
-        
+
         # Teardown: Ensure user is re-fetched in this session context if necessary
         user_in_session = await session.get(User, user.id)
         if user_in_session:
             # Fetch and delete expenses paid by this user
-            stmt_expenses = select(Expense).where(Expense.paid_by_user_id == user_in_session.id)
+            stmt_expenses = select(Expense).where(
+                Expense.paid_by_user_id == user_in_session.id
+            )
             result_expenses = await session.exec(stmt_expenses)
             expenses_paid_by_user = result_expenses.all()
 
             for expense_obj in expenses_paid_by_user:
                 # Delete related ExpenseParticipant entries
-                stmt_participants = select(ExpenseParticipant).where(ExpenseParticipant.expense_id == expense_obj.id)
+                stmt_participants = select(ExpenseParticipant).where(
+                    ExpenseParticipant.expense_id == expense_obj.id
+                )
                 result_participants = await session.exec(stmt_participants)
                 participants = result_participants.all()
                 for participant in participants:
                     await session.delete(participant)
                 await session.delete(expense_obj)
-            
+
             await session.delete(user_in_session)
             await session.commit()
+
 
 @pytest_asyncio.fixture
 async def admin_user() -> AsyncGenerator[User, None]:
@@ -109,18 +119,22 @@ async def admin_user() -> AsyncGenerator[User, None]:
         session.add(admin)
         await session.commit()
         await session.refresh(admin)
-        
+
         yield admin
-        
+
         # Teardown
         admin_in_session = await session.get(User, admin.id)
         if admin_in_session:
-            stmt_expenses = select(Expense).where(Expense.paid_by_user_id == admin_in_session.id)
+            stmt_expenses = select(Expense).where(
+                Expense.paid_by_user_id == admin_in_session.id
+            )
             result_expenses = await session.exec(stmt_expenses)
             expenses_paid_by_user = result_expenses.all()
 
             for expense_obj in expenses_paid_by_user:
-                stmt_participants = select(ExpenseParticipant).where(ExpenseParticipant.expense_id == expense_obj.id)
+                stmt_participants = select(ExpenseParticipant).where(
+                    ExpenseParticipant.expense_id == expense_obj.id
+                )
                 result_participants = await session.exec(stmt_participants)
                 participants = result_participants.all()
                 for participant in participants:
@@ -133,19 +147,28 @@ async def admin_user() -> AsyncGenerator[User, None]:
 
 # Token Fixtures
 @pytest_asyncio.fixture
-async def normal_user_token_headers(client: AsyncClient, normal_user: User) -> dict[str, str]:
+async def normal_user_token_headers(
+    client: AsyncClient, normal_user: User
+) -> dict[str, str]:
     login_data = {"username": normal_user.username, "password": "password123"}
     res = await client.post("/api/v1/users/token", data=login_data)
     if res.status_code != 200:
-        pytest.fail(f"Failed to log in normal_user. Status: {res.status_code}, Response: {res.text}")
+        pytest.fail(
+            f"Failed to log in normal_user. Status: {res.status_code}, Response: {res.text}"
+        )
     token = res.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
 
+
 @pytest_asyncio.fixture
-async def admin_user_token_headers(client: AsyncClient, admin_user: User) -> dict[str, str]:
+async def admin_user_token_headers(
+    client: AsyncClient, admin_user: User
+) -> dict[str, str]:
     login_data = {"username": admin_user.username, "password": "password123"}
     res = await client.post("/api/v1/users/token", data=login_data)
     if res.status_code != 200:
-        pytest.fail(f"Failed to log in admin_user. Status: {res.status_code}, Response: {res.text}")
+        pytest.fail(
+            f"Failed to log in admin_user. Status: {res.status_code}, Response: {res.text}"
+        )
     token = res.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}

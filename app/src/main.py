@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager  # For lifespan events in newer FastAPI
 
-from app.db.database import create_db_and_tables
-from app.routers import users, groups, expenses
+from src.db.database import create_db_and_tables
+from src.routers import users, groups, expenses
 
 
 # Lifespan context manager for startup and shutdown events
