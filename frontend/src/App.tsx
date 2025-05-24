@@ -1,35 +1,50 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { Routes, Route } from 'react-router-dom';
+import Layout from './components/Layout';
+import LoginPage from './pages/LoginPage';
+import DashboardPage from './pages/DashboardPage';
+import SignupPage from './pages/SignupPage';
+import ProtectedRoute from './components/ProtectedRoute';
+import GroupsPage from './pages/GroupsPage';
+import ExpensesPage from './pages/ExpensesPage';
+import AdminUserListPage from './pages/admin/AdminUserListPage';
+import GroupCreatePage from './pages/groups/GroupCreatePage';
+import GroupDetailPage from './pages/groups/GroupDetailPage';
+import GroupEditPage from './pages/groups/GroupEditPage';
+import ExpenseCreatePage from './pages/expenses/ExpenseCreatePage';
+import ExpenseDetailPage from './pages/expenses/ExpenseDetailPage';
+import ExpenseEditPage from './pages/expenses/ExpenseEditPage'; // Import ExpenseEditPage
+import './App.css';
 
 function App() {
-  const [count, setCount] = useState(0)
-
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    <Layout>
+      <Routes>
+        <Route path="/" element={
+          <div>
+            <h1>Welcome to SpendShare</h1>
+            <p>This is the main content area.</p>
+          </div>
+        } />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
+        
+        {/* Protected Routes */}
+        <Route element={<ProtectedRoute />}> {/* Use ProtectedRoute as a layout for nested protected routes */}
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/groups" element={<GroupsPage />} />
+          <Route path="/groups/new" element={<GroupCreatePage />} />
+          <Route path="/groups/:groupId" element={<GroupDetailPage />} />
+          <Route path="/groups/:groupId/edit" element={<GroupEditPage />} />
+          <Route path="/expenses" element={<ExpensesPage />} /> 
+          <Route path="/expenses/new" element={<ExpenseCreatePage />} />
+          <Route path="/expenses/:expenseId" element={<ExpenseDetailPage />} />
+          <Route path="/expenses/:expenseId/edit" element={<ExpenseEditPage />} /> {/* Add route for ExpenseEditPage */}
+          <Route path="/admin/users" element={<AdminUserListPage />} /> 
+        </Route>
+        
+      </Routes>
+    </Layout>
+  );
 }
 
-export default App
+export default App;
