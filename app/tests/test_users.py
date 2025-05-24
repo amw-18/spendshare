@@ -11,18 +11,26 @@ async def test_create_user_success(client: AsyncClient):
         "password": "password123",
     }
     response = await client.post("/api/v1/users/", json=user_data)
-    assert (
-        response.status_code == status.HTTP_200_OK
-    )  # FastAPI default is 200 for POST if not specified
+    assert response.status_code == status.HTTP_200_OK
     data = response.json()
     assert data["email"] == user_data["email"]
     assert data["username"] == user_data["username"]
     assert "id" in data
     assert "hashed_password" not in data  # Ensure password is not returned
 
+    # Login as the created user
+    login_data = {
+        "username": user_data["username"],
+        "password": user_data["password"]
+    }
+    login_response = await client.post("/api/v1/users/token", data=login_data)
+    assert login_response.status_code == status.HTTP_200_OK
+    token = login_response.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
     # Verify user is in DB by trying to get them
     user_id = data["id"]
-    response = await client.get(f"/api/v1/users/{user_id}")
+    response = await client.get(f"/api/v1/users/{user_id}", headers=headers)
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["email"] == user_data["email"]
 
@@ -72,8 +80,8 @@ async def test_create_user_duplicate_username(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_read_user_not_found(client: AsyncClient):
-    response = await client.get("/api/v1/users/99999")  # Non-existent user ID
+async def test_read_user_not_found(client: AsyncClient, admin_user_token_headers: dict[str, str]):
+    response = await client.get("/api/v1/users/99999", headers=admin_user_token_headers)  # Non-existent user ID
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
@@ -86,7 +94,7 @@ from app.models.models import User
 # This helper is defined in other test files, ensure it's available or redefine.
 # For now, assuming it's accessible or will be defined if needed.
 async def create_test_user_for_auth(
-    client: AsyncClient, username: str, email: str, password: str = "testpassword"
+    client: AsyncClient, username: str, email: str, password: str = "password123"
 ) -> dict:
     user_data = {"username": username, "email": email, "password": password}
     # This endpoint is public for user creation
@@ -94,7 +102,7 @@ async def create_test_user_for_auth(
     assert response.status_code == status.HTTP_200_OK, f"Failed to create user {username}: {response.text}"
     return response.json()
 
-async def get_user_token_headers(client: AsyncClient, username: str, password: str = "testpassword") -> dict[str, str]:
+async def get_user_token_headers(client: AsyncClient, username: str, password: str = "password123") -> dict[str, str]:
     login_data = {"username": username, "password": password}
     res = await client.post("/api/v1/users/token", data=login_data)
     assert res.status_code == 200, f"Failed to log in {username}. Status: {res.status_code}, Response: {res.text}"
@@ -296,23 +304,33 @@ async def test_admin_login_as_nonexistent_user(
         headers=admin_user_token_headers
     )
     assert response.status_code == status.HTTP_404_NOT_FOUND
-    assert response.json()["detail"] == "User with id 99999 not found"
+    assert response.json()["detail"] == "User with id 999999 not found" # Corrected 99999 to 999999
 
 
 @pytest.mark.asyncio
-async def test_read_users_with_data(client: AsyncClient):
-    # Create a couple of users
-    user1_data = {"username": "user_a", "email": "usera@example.com", "password": "pw1"}
-    user2_data = {"username": "user_b", "email": "userb@example.com", "password": "pw2"}
-    # Ensure these are created before fetching all users
-    resp1 = await client.post("/api/v1/users/", json=user1_data)
-    assert resp1.status_code == status.HTTP_200_OK
-    resp2 = await client.post("/api/v1/users/", json=user2_data)
-    assert resp2.status_code == status.HTTP_200_OK
+async def test_read_users_with_data(client: AsyncClient, admin_user_token_headers: dict[str, str]):
+    # Create two users first
+    user1_data = {
+        "username": "testuser1",
+        "email": "testuser1@example.com",
+        "password": "password123",
+    }
+    user2_data = {
+        "username": "testuser2",
+        "email": "testuser2@example.com",
+        "password": "password123",
+    }
 
-    response = await client.get("/api/v1/users/")
+    response1 = await client.post("/api/v1/users/", json=user1_data)
+    assert response1.status_code == status.HTTP_200_OK
+    response2 = await client.post("/api/v1/users/", json=user2_data)
+    assert response2.status_code == status.HTTP_200_OK
+
+    # Get all users (requires admin auth)
+    response = await client.get("/api/v1/users/", headers=admin_user_token_headers)
     assert response.status_code == status.HTTP_200_OK
     users = response.json()
+    assert isinstance(users, list)
 
     # Since the DB is session-scoped and might contain users from other tests ran in the same session before this one,
     # we check that at least these two users are present.
@@ -330,37 +348,57 @@ async def test_read_users_with_data(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_update_user_success(client: AsyncClient):
+    # Create initial user
     user_data = {
         "username": "update_me",
         "email": "update_me@example.com",
-        "password": "initial_password",
+        "password": "P@ssw0rd",  # Changed to a valid password
     }
     create_response = await client.post("/api/v1/users/", json=user_data)
     assert create_response.status_code == status.HTTP_200_OK
     user_id = create_response.json()["id"]
 
+    # Get auth token for the created user
+    login_response = await client.post("/api/v1/users/token", data={
+        "username": user_data["username"],
+        "password": user_data["password"]
+    })
+    assert login_response.status_code == status.HTTP_200_OK
+    token = login_response.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
     update_data = {
         "username": "updated_username",
         "email": "updated_email@example.com",
-        # Not updating password here, but could also test password update
     }
-    update_response = await client.put(f"/api/v1/users/{user_id}", json=update_data)
+    update_response = await client.put(f"/api/v1/users/{user_id}", json=update_data, headers=headers)
     assert update_response.status_code == status.HTTP_200_OK
     updated_user = update_response.json()
     assert updated_user["username"] == update_data["username"]
     assert updated_user["email"] == update_data["email"]
 
-    # Verify by getting the user again
-    get_response = await client.get(f"/api/v1/users/{user_id}")
+    # Verify by getting the user again, re-login to get a new token with the updated username
+    new_login_data = {
+        "username": update_data["username"], # Use the new username
+        "password": user_data["password"]   # Original password
+    }
+    new_login_response = await client.post("/api/v1/users/token", data=new_login_data)
+    assert new_login_response.status_code == status.HTTP_200_OK
+    new_token = new_login_response.json()["access_token"]
+    new_headers = {"Authorization": f"Bearer {new_token}"}
+
+    get_response = await client.get(f"/api/v1/users/{user_id}", headers=new_headers) # Use new headers
     assert get_response.status_code == status.HTTP_200_OK
     assert get_response.json()["username"] == update_data["username"]
 
 
 @pytest.mark.asyncio
-async def test_update_user_not_found(client: AsyncClient):
+async def test_update_user_not_found(client: AsyncClient, admin_user_token_headers: dict[str, str]):
     update_data = {"username": "ghost_updater"}
     response = await client.put(
-        "/api/v1/users/99999", json=update_data
+        "/api/v1/users/99999", 
+        json=update_data,
+        headers=admin_user_token_headers
     )  # Non-existent user ID
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
@@ -370,12 +408,12 @@ async def test_update_user_email_conflict(client: AsyncClient):
     user1 = {
         "username": "user1_conflict",
         "email": "user1_conflict@example.com",
-        "password": "pw",
+        "password": "password123",
     }
     user2 = {
         "username": "user2_conflict",
         "email": "user2_conflict@example.com",
-        "password": "pw",
+        "password": "password123",
     }
     resp1 = await client.post("/api/v1/users/", json=user1)
     assert resp1.status_code == status.HTTP_200_OK
@@ -383,36 +421,54 @@ async def test_update_user_email_conflict(client: AsyncClient):
     assert resp2.status_code == status.HTTP_200_OK
     user2_id = resp2.json()["id"]
 
+    # Get auth token for user2
+    login_response = await client.post("/api/v1/users/token", data={
+        "username": user2["username"],
+        "password": user2["password"]
+    })
+    assert login_response.status_code == status.HTTP_200_OK
+    token = login_response.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
     update_data = {
         "email": user1["email"]
     }  # Try to update user2's email to user1's email
-    response = await client.put(f"/api/v1/users/{user2_id}", json=update_data)
+    response = await client.put(f"/api/v1/users/{user2_id}", json=update_data, headers=headers)
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert "email already registered" in response.json()["detail"].lower()
 
 
 @pytest.mark.asyncio
-async def test_delete_user_success(client: AsyncClient):
+async def test_delete_user_success(client: AsyncClient, admin_user_token_headers: dict[str, str]):
+    # Create user to be deleted
     user_data = {
         "username": "to_be_deleted",
         "email": "delete_me@example.com",
-        "password": "shortlife",
+        "password": "password123",
     }
     create_response = await client.post("/api/v1/users/", json=user_data)
     assert create_response.status_code == status.HTTP_200_OK
     user_id = create_response.json()["id"]
 
-    delete_response = await client.delete(f"/api/v1/users/{user_id}")
-    assert delete_response.status_code == status.HTTP_200_OK
-    # Optionally, assert the content of the deleted user response if it's meaningful
-    # assert delete_response.json()["email"] == user_data["email"]
+    # Get auth token for the created user
+    login_response = await client.post("/api/v1/users/token", data={
+        "username": user_data["username"],
+        "password": user_data["password"]
+    })
+    assert login_response.status_code == status.HTTP_200_OK
+    token = login_response.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
 
-    # Verify user is actually deleted
-    get_response = await client.get(f"/api/v1/users/{user_id}")
+    # Delete user with their own token
+    delete_response = await client.delete(f"/api/v1/users/{user_id}", headers=headers)
+    assert delete_response.status_code == status.HTTP_200_OK
+
+    # Verify user is actually deleted (using admin token since the user's token is now invalid)
+    get_response = await client.get(f"/api/v1/users/{user_id}", headers=admin_user_token_headers)
     assert get_response.status_code == status.HTTP_404_NOT_FOUND
 
 
 @pytest.mark.asyncio
-async def test_delete_user_not_found(client: AsyncClient):
-    response = await client.delete("/api/v1/users/99999")  # Non-existent user ID
+async def test_delete_user_not_found(client: AsyncClient, admin_user_token_headers: dict[str, str]):
+    response = await client.delete("/api/v1/users/99999", headers=admin_user_token_headers)  # Non-existent user ID
     assert response.status_code == status.HTTP_404_NOT_FOUND

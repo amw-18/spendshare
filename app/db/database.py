@@ -9,7 +9,7 @@ ASYNC_DATABASE_URL = "sqlite+aiosqlite:///./main.db"
 # Note: The connect_args={"check_same_thread": False} is specific to SQLite's default driver
 # and is not needed or used by aiosqlite in the same way. aiosqlite handles concurrency properly.
 
-async_engine = create_async_engine(ASYNC_DATABASE_URL, echo=True, future=True)
+async_engine = create_async_engine(ASYNC_DATABASE_URL, echo=False, future=True)
 # `future=True` enables the newer SQLAlchemy 2.0 style execution model which is preferred.
 
 

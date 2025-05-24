@@ -1,7 +1,7 @@
 from typing import List, Optional
 from sqlmodel import SQLModel
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, constr, EmailStr, Field, field_validator
 
 
 # Token Schema
@@ -12,12 +12,34 @@ class Token(BaseModel):
 
 # User Schemas
 class UserBase(SQLModel):
-    username: str
-    email: str
+    username: constr(min_length=3, max_length=50, pattern=r'^[a-zA-Z0-9_-]+$')
+    email: EmailStr
+    
+    @field_validator('username')
+    @classmethod
+    def validate_username(cls, v: str) -> str:
+        if len(v) > 50:
+            raise ValueError('username must be at most 50 characters')
+        if len(v) < 3:
+            raise ValueError('username must be at least 3 characters')
+        if not v.replace('-', '').replace('_', '').isalnum():
+            raise ValueError('username must only contain letters, numbers, hyphens, and underscores')
+        return v
 
 
 class UserCreate(UserBase):
-    password: str
+    password: constr(min_length=8)
+    
+    @field_validator('password')
+    @classmethod
+    def password_must_contain_number(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError('password must be at least 8 characters')
+        if not any(char.isdigit() for char in v):
+            raise ValueError('password must contain at least one number')
+        if not any(char.isalpha() for char in v):
+            raise ValueError('password must contain at least one letter')
+        return v
 
 
 class UserRead(UserBase):
@@ -27,19 +49,45 @@ class UserRead(UserBase):
 
 class UserUpdate(SQLModel):
     username: Optional[str] = None
-    email: Optional[str] = None
-    password: Optional[str] = None
+    email: Optional[EmailStr] = None
+    password: Optional[constr(min_length=8)] = None
     is_admin: Optional[bool] = None
+
+    @field_validator('password')
+    @classmethod
+    def password_must_contain_number_if_provided(cls, v: Optional[str]) -> Optional[str]:
+        if v is None: 
+            return v
+        if len(v) < 8:
+            raise ValueError('password must be at least 8 characters')
+        if not any(char.isdigit() for char in v):
+            raise ValueError('password must contain at least one number')
+        if not any(char.isalpha() for char in v):
+            raise ValueError('password must contain at least one letter')
+        return v
+    
+    @field_validator('username')
+    @classmethod
+    def validate_username_if_provided(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        if len(v) > 50:
+            raise ValueError('username must be at most 50 characters')
+        if len(v) < 3:
+            raise ValueError('username must be at least 3 characters')
+        if not v.replace('-', '').replace('_', '').isalnum():
+            raise ValueError('username must only contain letters, numbers, hyphens, and underscores')
+        return v
 
 
 # Group Schemas
 class GroupBase(SQLModel):
-    name: str
+    name: constr(min_length=1, max_length=100)
     description: Optional[str] = None
 
 
 class GroupCreate(GroupBase):
-    pass  # created_by_user_id will be set from current_user
+    pass  
 
 
 class GroupRead(GroupBase):
@@ -53,51 +101,47 @@ class GroupUpdate(SQLModel):
 
 # Expense Schemas
 class ExpenseBase(SQLModel):
-    description: str
-    amount: float
-    # paid_by_user_id: int # Will be set from current_user
+    description: constr(min_length=1) 
+    amount: float = Field(gt=0)
     group_id: Optional[int] = None
 
 
 class ExpenseCreate(ExpenseBase):
-    # For creating an expense, we might want to specify participants and their shares
-    # This can get complex, so for now, let's assume a simple model.
-    # Advanced: participants: Optional[List[Tuple[int, Optional[float]]]] = None # List of (user_id, share_amount)
-    # paid_by_user_id is removed from ExpenseBase and thus not here.
-    pass
+    pass  
 
 
 class ExpenseRead(ExpenseBase):
     id: int
     date: datetime
-    participant_details: List["ExpenseParticipantReadWithUser"] = [] # Added for reading shares and user
+    paid_by_user_id: Optional[int] = None
+    description: str = Field(default="") 
+    participant_details: List["ExpenseParticipantReadWithUser"] = [] 
 
 
 class ExpenseUpdate(SQLModel):
-    description: Optional[str] = None
-    amount: Optional[float] = None
+    description: Optional[constr(min_length=1)] = None
+    amount: Optional[float] = Field(default=None, gt=0)
     paid_by_user_id: Optional[int] = None
     group_id: Optional[int] = None
-    participants: Optional[List["ParticipantUpdate"]] = None # Added participants field
+    participants: Optional[List["ParticipantUpdate"]] = None 
 
 
 # Schema for Participant Update
 class ParticipantUpdate(SQLModel):
     user_id: int
-    # share_amount: Optional[float] = None # For now, shares will be recalculated equally
+    share_amount: Optional[float] = None 
 
 
 # Schemas for reading participant details with shares
-class ExpenseParticipantBase(SQLModel): # Base for ExpenseParticipant data
+class ExpenseParticipantBase(SQLModel): 
     user_id: int
     expense_id: int
     share_amount: Optional[float]
 
-class ExpenseParticipantRead(ExpenseParticipantBase): # Reading an ExpenseParticipant link
-    # No extra fields needed if ExpenseParticipantBase is sufficient
+class ExpenseParticipantRead(ExpenseParticipantBase): 
     pass
 
-class ExpenseParticipantReadWithUser(ExpenseParticipantRead): # Reading an ExpenseParticipant link with User details
+class ExpenseParticipantReadWithUser(ExpenseParticipantRead): 
     user: UserRead
 
 
@@ -105,23 +149,15 @@ class ExpenseParticipantReadWithUser(ExpenseParticipantRead): # Reading an Expen
 
 
 class UserReadWithDetails(UserRead):
-    # groups: List["GroupRead"] = [] # Causes Pydantic ForwardRef error if GroupRead not defined or imported
-    # expenses_paid: List["ExpenseRead"] = []
-    # expenses_participated_in: List["ExpenseRead"] = []
-    pass  # Postponing detailed relationships in schemas until CRUD and routers are built to see what's needed
+    pass  
 
 
 class GroupReadWithMembers(GroupRead):
-    # members: List["UserRead"] = []
-    # expenses: List["ExpenseRead"] = []
-    pass  # Postponing detailed relationships
+    pass  
 
 
 class ExpenseReadWithDetails(ExpenseRead):
-    # paid_by: "UserRead"
-    # group: Optional["GroupRead"] = None
-    # participants: List["UserRead"] = []
-    pass  # Postponing detailed relationships
+    pass  
 
 
 # Link Schemas (if needed for direct manipulation, often handled via parent object operations)

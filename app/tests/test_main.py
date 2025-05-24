@@ -43,8 +43,8 @@ async def test_db_tables_created_on_startup(client: AsyncClient):
 # You could also add a test for a known endpoint from one of the routers (e.g., /api/v1/users/)
 # to ensure routers are included and working after startup.
 @pytest.mark.asyncio
-async def test_users_endpoint_available_after_startup(client: AsyncClient):
-    response = await client.get("/api/v1/users/") # This is a known endpoint from users router
+async def test_users_endpoint_available_after_startup(client: AsyncClient, admin_user_token_headers: dict[str, str]):
+    response = await client.get("/api/v1/users/", headers=admin_user_token_headers) # This is a known endpoint from users router
     assert response.status_code == status.HTTP_200_OK 
     # The response might be an empty list if no users, which is fine for this test.
     assert isinstance(response.json(), list)

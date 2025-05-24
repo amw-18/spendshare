@@ -5,7 +5,7 @@ from sqlmodel import select
 
 from app.db.database import get_session
 from app.models import models # Used as models.Group in type hints
-from app.models.models import Group, User, UserGroupLink # User is imported here
+from app.models.models import Group, User, UserGroupLink, Expense, ExpenseParticipant # Added Expense, ExpenseParticipant
 from app.models import schemas
 from app.core.security import get_current_user # Added get_current_user
 from app.utils import get_object_or_404 # Removed get_optional_object_by_attribute
@@ -107,17 +107,12 @@ async def delete_group_endpoint(
     current_user: models.User = Depends(get_current_user),
 ) -> int:
     db_group = await get_object_or_404(session, Group, group_id)
-
     if not current_user.is_admin and db_group.created_by_user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to delete this group")
 
-    # Logic from crud_group.delete_group
-    # Need to ensure related UserGroupLink entries are handled if necessary,
-    # or rely on DB cascade if configured. For now, direct delete.
-    # Also, consider expenses related to the group. The current models don't show cascade delete for group on expenses.
-    # This might be an issue to flag, but for now, just delete the group.
     await session.delete(db_group)
     await session.commit()
+
     return group_id
 
 
@@ -132,12 +127,15 @@ async def add_group_member_endpoint(
 ) -> models.Group:
     db_group = await get_object_or_404(session, Group, group_id)
     user_to_add = await get_object_or_404(session, User, user_id)
-    # Custom message for user_to_add can be handled by catching HTTPException from get_object_or_404
-    # and re-raising if needed, or by accepting generic message.
 
-    # Check if user is already a member using get_optional_object_by_attribute for UserGroupLink
-    # This requires a composite key, so direct usage of get_optional_object_by_attribute is not straightforward.
-    # The existing select statement is more appropriate for composite keys.
+    # Authorization: Only group creator or admin can add members
+    if not current_user.is_admin and db_group.created_by_user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to add members to this group",
+        )
+
+    # Check if user is already a member
     link_exists_statement = select(UserGroupLink).where(
         UserGroupLink.group_id == group_id, UserGroupLink.user_id == user_id
     )
@@ -181,6 +179,14 @@ async def remove_group_member_endpoint(
     db_group = await get_object_or_404(session, Group, group_id)
     user_to_remove = await get_object_or_404(session, User, user_id)
 
+    # Authorization: Only group creator or admin can remove members (or user themselves)
+    # Current logic allows creator or admin. If self-removal is desired, add: or current_user.id == user_id
+    if not current_user.is_admin and db_group.created_by_user_id != current_user.id and current_user.id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to remove this member from the group",
+        )
+
     # Find the UserGroupLink entry to delete
     link_statement = select(UserGroupLink).where(
         UserGroupLink.group_id == group_id, UserGroupLink.user_id == user_id
@@ -190,6 +196,23 @@ async def remove_group_member_endpoint(
 
     if not link_to_delete:
         raise HTTPException(status_code=404, detail="User is not a member of this group.")
+
+    # Cascade removal from expenses in this group
+    # 1. Find all expenses associated with this group
+    expenses_in_group_statement = select(Expense).where(Expense.group_id == group_id)
+    expenses_result = await session.exec(expenses_in_group_statement)
+    expenses_in_group = expenses_result.all()
+
+    for expense_obj in expenses_in_group:
+        # 2. For each expense, find and delete the ExpenseParticipant record for the user_to_remove
+        participant_statement = select(ExpenseParticipant).where(
+            ExpenseParticipant.expense_id == expense_obj.id,
+            ExpenseParticipant.user_id == user_to_remove.id
+        )
+        participant_result = await session.exec(participant_statement)
+        participant_to_delete = participant_result.first()
+        if participant_to_delete:
+            await session.delete(participant_to_delete)
 
     await session.delete(link_to_delete)
     # Alternatively, if using db_group.members.remove(user_to_remove), ensure it works with backrefs

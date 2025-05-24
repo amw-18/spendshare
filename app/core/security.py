@@ -9,7 +9,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from jose import JWTError, jwt
@@ -29,9 +29,9 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/users/token")
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
@@ -45,10 +45,11 @@ async def get_current_user(token: str = Depends(oauth2_scheme), session: AsyncSe
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
-        if username is None:
+        user_id: int = payload.get("user_id")
+        if username is None or user_id is None:
             raise credentials_exception
-        user = await session.get(models.User, username) # Assuming username is primary key and unique
-        if user is None:
+        user = await session.get(models.User, user_id)
+        if user is None or user.username != username:
             raise credentials_exception
         return user
     except JWTError:

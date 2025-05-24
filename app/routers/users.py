@@ -98,40 +98,31 @@ async def update_user_endpoint(
     
     # Prevent users from revoking their own admin status if they are the sole admin
     # This logic is more complex and might require a global check or be handled as a separate feature.
-    # For now, we'll allow an admin to revoke their own admin status if they choose to.
-    # However, if user_in.is_admin is False and current_user.id == user_id and current_user.is_admin:
-    #    pass # This case is allowed.
+    # For now, we assume there's a mechanism or policy outside this direct endpoint to prevent this.
 
-    if user_in.email:
-        existing_user_email = await get_optional_object_by_attribute(session, User, "email", user_in.email)
+    user_data = user_in.model_dump(exclude_unset=True)
+
+    # Check for email conflict
+    if "email" in user_data and user_data["email"] != db_user.email:
+        existing_user_email = await get_optional_object_by_attribute(session, User, "email", user_data["email"])
         if existing_user_email and existing_user_email.id != user_id:
             raise HTTPException(
                 status_code=400, detail="Email already registered by another user."
             )
-    if user_in.username:
-        existing_user_username = await get_optional_object_by_attribute(session, User, "username", user_in.username)
+
+    # Check for username conflict
+    if "username" in user_data and user_data["username"] != db_user.username:
+        existing_user_username = await get_optional_object_by_attribute(session, User, "username", user_data["username"])
         if existing_user_username and existing_user_username.id != user_id:
             raise HTTPException(status_code=400, detail="Username already taken.")
 
-    # Logic from crud_user.update_user
-    user_data = user_in.model_dump(exclude_unset=True)
-    if user_data.get("password"):
-        hashed_password = get_password_hash(user_data["password"])
-        user_data["password"] = hashed_password
+    # Handle password update separately
+    if "password" in user_data:
+        if user_data["password"]:
+            db_user.hashed_password = get_password_hash(user_data["password"])
+        del user_data["password"]  # Remove password from dict to prevent direct setattr
 
-    # If is_admin is not part of the input (None), do not change it unless current_user is admin
-    # If current_user is not admin, they cannot change is_admin field AT ALL (already handled by the check above for True)
-    # If current_user is admin, they CAN change it.
-    # The user_data dictionary will contain 'is_admin' only if it was provided in the input.
-    # If 'is_admin' is not in user_data, it means it was not in user_in or was user_in.is_admin=None.
-    # If it is in user_data and current_user is not admin, it must be False or None (already checked for True).
-    # If user_in.is_admin is None, it's excluded by exclude_unset=True, so is_admin won't be in user_data.
-    # If user_in.is_admin is False, it will be in user_data.
-    # An admin can set another user's (or their own) admin status to False.
-    # A non-admin cannot set their own admin status to False if they are already admin (this is not possible as they are not admin).
-    # A non-admin cannot set their own admin status to True (already checked).
-    
-    # Update fields
+    # Update other fields
     for key, value in user_data.items():
         # Special handling for is_admin: only allow if current_user is admin, or if user is de-adminning themselves (which is fine)
         if key == "is_admin":

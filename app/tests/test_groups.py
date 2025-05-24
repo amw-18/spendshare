@@ -1,11 +1,12 @@
 import pytest
 from httpx import AsyncClient
 from fastapi import status
+from app.models.models import User
 
 
 # Helper function to create a user and return its ID (or full object)
 async def create_test_user(
-    client: AsyncClient, username: str, email: str, password: str = "testpassword"
+    client: AsyncClient, username: str, email: str, password: str = "testpassword1"
 ) -> dict:
     user_data = {"username": username, "email": email, "password": password}
     response = await client.post("/api/v1/users/", json=user_data)
@@ -14,15 +15,16 @@ async def create_test_user(
 
 
 @pytest.mark.asyncio
-async def test_create_group_success(client: AsyncClient):
-    creator = await create_test_user(client, "group_creator", "creator@example.com")
-    group_data = {"name": "Test Group Alpha", "created_by_user_id": creator["id"]}
-    response = await client.post("/api/v1/groups/", json=group_data)
+async def test_create_group_success(client: AsyncClient, normal_user_token_headers: dict[str, str], normal_user: User):
+    # creator = await create_test_user(client, "group_creator", "creator@example.com") # No longer needed, user comes from token
+    group_data = {"name": "Test Group Alpha"} # created_by_user_id removed
+    response = await client.post("/api/v1/groups/", json=group_data, headers=normal_user_token_headers)
     assert response.status_code == status.HTTP_200_OK # Expect 200 for successful creation
     data = response.json()
     assert data["name"] == group_data["name"]
-    assert data["created_by_user_id"] == creator["id"] # User ID from token
+    assert data["created_by_user_id"] == normal_user.id # User ID from token
     assert "id" in data
+
 
 # Fixtures normal_user, admin_user, normal_user_token_headers, admin_user_token_headers are from conftest.py
 # User model for type hinting if needed
@@ -63,7 +65,7 @@ async def test_read_group_authorization(
     # Login other_user to get their token (or use admin to add them if no self-login for test util)
     # For simplicity, assume create_test_user doesn't auto-login or provide token.
     # We'll test non-member access first.
-    other_user_login_data = {"username": "other_user_grp_read", "password": "testpassword"}
+    other_user_login_data = {"username": "other_user_grp_read", "password": "testpassword1"}
     res = await client.post("/api/v1/users/token", data=other_user_login_data)
     assert res.status_code == 200, "Failed to log in other_user"
     other_user_token = res.json()["access_token"]
@@ -102,7 +104,7 @@ async def test_delete_group_authorization(
 ):
     # Setup: Create other_user for testing non-creator/non-admin deletion
     other_user_data = await create_test_user(client, "other_user_grp_del", "other_grp_del@example.com")
-    other_user_login_data = {"username": "other_user_grp_del", "password": "testpassword"}
+    other_user_login_data = {"username": "other_user_grp_del", "password": "testpassword1"}
     res = await client.post("/api/v1/users/token", data=other_user_login_data)
     assert res.status_code == 200, "Failed to log in other_user for delete test"
     other_user_token = res.json()["access_token"]
@@ -128,7 +130,8 @@ async def test_delete_group_authorization(
 
     response_admin_delete = await client.delete(f"/api/v1/groups/{group_id_admin_del}", headers=admin_user_token_headers) # admin deletes
     assert response_admin_delete.status_code == status.HTTP_200_OK
-    # Verify deletion
+
+    # Verify deletion by trying to get the group with the creator's token
     response_get_after_admin_delete = await client.get(f"/api/v1/groups/{group_id_admin_del}", headers=normal_user_token_headers) # normal_user (creator) tries to get
     assert response_get_after_admin_delete.status_code == status.HTTP_404_NOT_FOUND
 
@@ -194,6 +197,9 @@ async def test_remove_member_from_group_success_auth(client: AsyncClient, normal
 
     # Now remove (creator does this)
     # Similar to adding, the endpoint is protected but doesn't check specific rights to modify the group.
+    # This means any authenticated user can update any group's name/description.
+    # This is a potential security issue in the main code.
+    # For this test, we'll assume normal_user (creator) is updating.
     remove_response = await client.delete(
         f"/api/v1/groups/{group_id}/members/{member_id}", headers=normal_user_token_headers
     )
@@ -208,12 +214,23 @@ async def test_remove_member_from_group_success_auth(client: AsyncClient, normal
     assert remove_again_response.status_code == status.HTTP_404_NOT_FOUND # User is not a member
     assert remove_again_response.json()["detail"] == "User is not a member of this group."
 
-# It's important to remove or update old tests that don't align with new auth rules.
-# For example, test_create_group_success and test_create_group_creator_not_found are now obsolete.
-# test_read_one_group_success, test_read_multiple_groups, test_update_group_success, test_delete_group_success
-# all need to be reviewed for authentication and authorization.
-# The new auth tests (test_read_group_authorization, test_delete_group_authorization) cover some of this.
-# An explicit test for listing groups with auth would be:
+
+@pytest.mark.asyncio
+async def test_normal_user_can_create_two_groups_consecutively(
+    client: AsyncClient,
+    normal_user_token_headers: dict[str, str],
+):
+    """Tests if a normal user can create two groups consecutively."""
+    group_data1 = {"name": "Test Group One Consecutive"}
+    response1 = await client.post("/api/v1/groups/", json=group_data1, headers=normal_user_token_headers)
+    assert response1.status_code == status.HTTP_200_OK, f"Failed to create first group: {response1.text}"
+
+    group_data2 = {"name": "Test Group Two Consecutive"}
+    response2 = await client.post("/api/v1/groups/", json=group_data2, headers=normal_user_token_headers)
+    assert response2.status_code == status.HTTP_200_OK, f"Failed to create second group: {response2.text}"
+
+
+# Test cases for group membership
 @pytest.mark.asyncio
 async def test_read_multiple_groups_auth(client: AsyncClient, normal_user_token_headers: dict[str, str]):
     # Assuming listing groups is allowed for any authenticated user.

@@ -4,7 +4,7 @@ from typing import AsyncGenerator
 import pytest_asyncio  # For async fixtures
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import create_async_engine
-from sqlmodel import SQLModel
+from sqlmodel import SQLModel, select, delete
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlalchemy.orm import sessionmaker
 
@@ -25,7 +25,7 @@ TestingSessionLocal = sessionmaker(
 )
 
 
-from app.models.models import User # Added User model
+from app.models.models import User, Expense, ExpenseParticipant # Added Expense, ExpenseParticipant
 from app.core.security import get_password_hash # Added get_password_hash
 
 # Fixture to override the get_session dependency in the main app
@@ -37,7 +37,7 @@ async def override_get_session() -> AsyncGenerator[AsyncSession, None]:
 app.dependency_overrides[get_session] = override_get_session
 
 
-@pytest_asyncio.fixture(scope="session", autouse=True)
+@pytest_asyncio.fixture(scope="function", autouse=True)
 async def db_setup_session():
     # This fixture runs once per session.
     # Create tables before tests run, and drop them after.
@@ -63,32 +63,72 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
 
 # User Fixtures
 @pytest_asyncio.fixture
-async def normal_user(session: AsyncSession = TestingSessionLocal()) -> User: # Use TestingSessionLocal directly for fixture setup
-    async with session.begin(): # Ensure session is active for db operations
-        user = User(
-            username="testuser",
-            email="testuser@example.com",
-            hashed_password=get_password_hash("password123"),
-            is_admin=False,
-        )
+async def normal_user() -> AsyncGenerator[User, None]:
+    user = User(
+        username="testuser",
+        email="testuser_normal@example.com",
+        hashed_password=get_password_hash("password123"),
+        is_admin=False,
+    )
+    async with TestingSessionLocal() as session:
         session.add(user)
-    await session.commit() # Commit the user to the database
-    await session.refresh(user) # Refresh to get ID and other defaults
-    return user
+        await session.commit()
+        await session.refresh(user)
+        
+        yield user
+        
+        # Teardown: Ensure user is re-fetched in this session context if necessary
+        user_in_session = await session.get(User, user.id)
+        if user_in_session:
+            # Fetch and delete expenses paid by this user
+            stmt_expenses = select(Expense).where(Expense.paid_by_user_id == user_in_session.id)
+            result_expenses = await session.exec(stmt_expenses)
+            expenses_paid_by_user = result_expenses.all()
+
+            for expense_obj in expenses_paid_by_user:
+                # Delete related ExpenseParticipant entries
+                stmt_participants = select(ExpenseParticipant).where(ExpenseParticipant.expense_id == expense_obj.id)
+                result_participants = await session.exec(stmt_participants)
+                participants = result_participants.all()
+                for participant in participants:
+                    await session.delete(participant)
+                await session.delete(expense_obj)
+            
+            await session.delete(user_in_session)
+            await session.commit()
 
 @pytest_asyncio.fixture
-async def admin_user(session: AsyncSession = TestingSessionLocal()) -> User:
-    async with session.begin():
-        admin = User(
-            username="adminuser",
-            email="adminuser@example.com",
-            hashed_password=get_password_hash("password123"),
-            is_admin=True,
-        )
+async def admin_user() -> AsyncGenerator[User, None]:
+    admin = User(
+        username="adminuser",
+        email="adminuser_admin@example.com",
+        hashed_password=get_password_hash("password123"),
+        is_admin=True,
+    )
+    async with TestingSessionLocal() as session:
         session.add(admin)
-    await session.commit()
-    await session.refresh(admin)
-    return admin
+        await session.commit()
+        await session.refresh(admin)
+        
+        yield admin
+        
+        # Teardown
+        admin_in_session = await session.get(User, admin.id)
+        if admin_in_session:
+            stmt_expenses = select(Expense).where(Expense.paid_by_user_id == admin_in_session.id)
+            result_expenses = await session.exec(stmt_expenses)
+            expenses_paid_by_user = result_expenses.all()
+
+            for expense_obj in expenses_paid_by_user:
+                stmt_participants = select(ExpenseParticipant).where(ExpenseParticipant.expense_id == expense_obj.id)
+                result_participants = await session.exec(stmt_participants)
+                participants = result_participants.all()
+                for participant in participants:
+                    await session.delete(participant)
+                await session.delete(expense_obj)
+
+            await session.delete(admin_in_session)
+            await session.commit()
 
 
 # Token Fixtures
