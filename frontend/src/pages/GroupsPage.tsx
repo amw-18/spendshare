@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { DefaultService, GroupRead } from '../generated/api'; // Assuming GroupRead is the correct type
+import { DefaultService, type GroupRead } from '../generated/api'; // Assuming GroupRead is the correct type
 import { PlusCircleIcon, UserGroupIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import { useAuthStore } from '../store/authStore';
 
@@ -94,10 +94,10 @@ const GroupsPage: React.FC = () => {
                 )}
                 {/* You can add more details here, like number of members or total expenses, if available */}
                 <div className="mt-4 pt-4 border-t border-gray-100">
-                    <p className="text-xs text-gray-500">
-                        Created on: {new Date(group.created_at).toLocaleDateString()}
-                    </p>
-                    {/* Add more meta data if needed */}
+                  <p className="text-xs text-gray-500">
+                    Created on: {new Date(group.created_at).toLocaleDateString()}
+                  </p>
+                  {/* Add more meta data if needed */}
                 </div>
               </div>
             </Link>

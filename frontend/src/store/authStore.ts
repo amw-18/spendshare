@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { UserRead } from '../generated/api';
+import { type UserRead } from '../generated/api';
 
 interface AuthState {
   token: string | null;

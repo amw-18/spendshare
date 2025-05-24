@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { DefaultService, ExpenseRead, UserRead } from '../generated/api';
+import { DefaultService, type ExpenseRead, type UserRead } from '../generated/api';
 import { useAuthStore } from '../store/authStore';
 import { PlusCircleIcon, DocumentTextIcon, UserGroupIcon, ChevronRightIcon, CalendarDaysIcon, UserCircleIcon } from '@heroicons/react/24/outline';
 
@@ -9,7 +9,7 @@ const ExpenseListPage: React.FC = () => {
   const [expenses, setExpenses] = useState<ExpenseRead[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   // For resolving payer names - ideally, backend would provide payer object or this would be more sophisticated
   const [usersMap, setUsersMap] = useState<Record<number, UserRead>>({});
 
@@ -34,7 +34,7 @@ const ExpenseListPage: React.FC = () => {
           if (expense.paid_by_user_id) userIdsToFetch.add(expense.paid_by_user_id);
           // Participants are already UserRead objects in participant_details so no need to fetch them separately
         });
-        
+
         if (userIdsToFetch.size > 0) {
           // This is a simplified approach. In a real app, you might have a global user cache or a more
           // efficient way to batch-fetch user details. For now, we fetch all users and create a map.
@@ -61,7 +61,7 @@ const ExpenseListPage: React.FC = () => {
 
     fetchExpensesAndUsers();
   }, [currentUser]);
-  
+
   const getPayerUsername = (paidByUserId: number | undefined | null): string => {
     if (!paidByUserId) return 'N/A';
     if (paidByUserId === currentUser?.id) return 'You';
@@ -127,7 +127,7 @@ const ExpenseListPage: React.FC = () => {
                           Paid by: {getPayerUsername(expense.paid_by_user_id)}
                         </p>
                         {expense.group && (
-                           <p className="mt-1 sm:mt-0 flex items-center">
+                          <p className="mt-1 sm:mt-0 flex items-center">
                             <UserGroupIcon className="flex-shrink-0 mr-1.5 h-5 w-5 text-gray-400" />
                             Group: {expense.group.name}
                           </p>

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DefaultService, UserCreate } from '../generated/api';
+import { DefaultService, type UserCreate } from '../generated/api';
 
 const SignupPage: React.FC = () => {
   const [username, setUsername] = useState('');
@@ -111,7 +111,7 @@ const SignupPage: React.FC = () => {
                 <p className="text-sm text-red-600 bg-red-100 p-3 rounded-md">{error}</p>
               </div>
             )}
-            
+
             {/* Success message is handled by redirecting to login page with a query param */}
 
             <div>

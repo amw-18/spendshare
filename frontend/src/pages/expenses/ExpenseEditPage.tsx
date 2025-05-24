@@ -2,11 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   DefaultService,
-  GroupRead,
-  UserRead,
-  ExpenseRead,
-  ExpenseUpdate,
-  ParticipantUpdate,
+  type GroupRead,
+  type UserRead,
+  type ExpenseRead,
+  type ExpenseUpdate,
+  type ParticipantUpdate,
 } from '../../generated/api';
 import { useAuthStore } from '../../store/authStore';
 import { ArrowLeftIcon, CheckCircleIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
@@ -26,7 +26,7 @@ const ExpenseEditPage: React.FC = () => {
   // Data for selects/options
   const [userGroups, setUserGroups] = useState<GroupRead[]>([]);
   const [availableUsers, setAvailableUsers] = useState<UserRead[]>([]); // For payer and participants
-  
+
   // UI state
   const [loading, setLoading] = useState<boolean>(false); // For form submission
   const [loadingInitialData, setLoadingInitialData] = useState<boolean>(true);
@@ -51,9 +51,9 @@ const ExpenseEditPage: React.FC = () => {
         const groupsPromise = DefaultService.readGroupsApiV1GroupsGet({});
         // Fetch all users. If a group is associated, this list can be filtered for participants.
         const usersPromise = DefaultService.readUsersApiV1UsersGet({});
-        
+
         const [expenseData, groupsData, usersData] = await Promise.all([expensePromise, groupsPromise, usersPromise]);
-        
+
         setFetchedExpense(expenseData);
         setDescription(expenseData.description);
         setAmount(expenseData.amount.toString());
@@ -73,22 +73,22 @@ const ExpenseEditPage: React.FC = () => {
     };
     fetchData();
   }, [expenseId]);
-  
+
   // Update available participants when group selection changes
   useEffect(() => {
     if (selectedGroupId && fetchedExpense) {
-        // If a group is selected, filter available users to group members
-        // This assumes we need to fetch group members explicitly if not on group object
-        DefaultService.readGroupMembersApiV1GroupsGroupIdMembersGet({ groupId: selectedGroupId })
-            .then(members => setAvailableUsers(members))
-            .catch(err => {
-                console.warn("Could not fetch members for selected group, using all users.", err);
-                // Fallback to all users if member fetching fails
-                DefaultService.readUsersApiV1UsersGet({}).then(setAvailableUsers);
-            });
+      // If a group is selected, filter available users to group members
+      // This assumes we need to fetch group members explicitly if not on group object
+      DefaultService.readGroupMembersApiV1GroupsGroupIdMembersGet({ groupId: selectedGroupId })
+        .then(members => setAvailableUsers(members))
+        .catch(err => {
+          console.warn("Could not fetch members for selected group, using all users.", err);
+          // Fallback to all users if member fetching fails
+          DefaultService.readUsersApiV1UsersGet({}).then(setAvailableUsers);
+        });
     } else if (fetchedExpense) {
-        // No group selected or fetch error, use all users
-        DefaultService.readUsersApiV1UsersGet({}).then(setAvailableUsers);
+      // No group selected or fetch error, use all users
+      DefaultService.readUsersApiV1UsersGet({}).then(setAvailableUsers);
     }
   }, [selectedGroupId, fetchedExpense]);
 
@@ -104,8 +104,8 @@ const ExpenseEditPage: React.FC = () => {
     setError(null);
 
     if (!expenseId) {
-        setError("Expense ID is missing.");
-        return;
+      setError("Expense ID is missing.");
+      return;
     }
     if (!description.trim() || !amount) {
       setError('Description and Amount are required.');
@@ -117,17 +117,17 @@ const ExpenseEditPage: React.FC = () => {
       return;
     }
     if (!paidByUserId) {
-        setError('Payer must be selected.');
-        return;
+      setError('Payer must be selected.');
+      return;
     }
-    
+
     // Ensure payer is included if participants are explicitly set
     let finalParticipantUpdates: ParticipantUpdate[] = participantUserIds.map(id => ({ user_id: id }));
     if (participantUserIds.length > 0 && !participantUserIds.includes(paidByUserId)) {
-        finalParticipantUpdates.push({ user_id: paidByUserId });
+      finalParticipantUpdates.push({ user_id: paidByUserId });
     }
     if (participantUserIds.length === 0) { // If no participants selected, payer is the only one
-        finalParticipantUpdates = [{ user_id: paidByUserId }];
+      finalParticipantUpdates = [{ user_id: paidByUserId }];
     }
 
 
@@ -143,16 +143,16 @@ const ExpenseEditPage: React.FC = () => {
     };
 
     try {
-      await DefaultService.updateExpenseApiV1ExpensesExpenseIdPut({ 
-        expenseId: numericExpenseId, 
-        requestBody: expenseUpdateData 
+      await DefaultService.updateExpenseApiV1ExpensesExpenseIdPut({
+        expenseId: numericExpenseId,
+        requestBody: expenseUpdateData
       });
       navigate(`/expenses/${numericExpenseId}`); // Redirect to expense detail page
     } catch (err: any) {
       console.error("Failed to update expense:", err);
       if (err.body && err.body.detail) {
         if (Array.isArray(err.body.detail)) {
-          setError(err.body.detail.map((d: any) => `${d.loc?.[d.loc.length-1] || 'Error'}: ${d.msg}`).join('; '));
+          setError(err.body.detail.map((d: any) => `${d.loc?.[d.loc.length - 1] || 'Error'}: ${d.msg}`).join('; '));
         } else {
           setError(err.body.detail);
         }
@@ -164,11 +164,11 @@ const ExpenseEditPage: React.FC = () => {
     }
   };
 
-  const filteredParticipantPool = availableUsers.filter(p => 
+  const filteredParticipantPool = availableUsers.filter(p =>
     p.username?.toLowerCase().includes(participantSearchTerm.toLowerCase()) ||
     p.email.toLowerCase().includes(participantSearchTerm.toLowerCase())
   );
-  
+
   if (loadingInitialData) {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -176,7 +176,7 @@ const ExpenseEditPage: React.FC = () => {
       </div>
     );
   }
-  
+
   if (error && !fetchedExpense) { // If initial fetch failed
     return (
       <div className="container mx-auto p-4">
@@ -184,12 +184,12 @@ const ExpenseEditPage: React.FC = () => {
           <strong className="font-bold">Error: </strong>
           <span className="block sm:inline">{error}</span>
         </div>
-         <button
-            onClick={() => navigate(expenseId ? `/expenses/${expenseId}` : '/expenses')}
-            className="inline-flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-500"
+        <button
+          onClick={() => navigate(expenseId ? `/expenses/${expenseId}` : '/expenses')}
+          className="inline-flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-500"
         >
-            <ArrowLeftIcon className="h-5 w-5 mr-1" />
-            {expenseId ? 'Back to Expense Details' : 'Back to Expenses'}
+          <ArrowLeftIcon className="h-5 w-5 mr-1" />
+          {expenseId ? 'Back to Expense Details' : 'Back to Expenses'}
         </button>
       </div>
     );
@@ -204,15 +204,15 @@ const ExpenseEditPage: React.FC = () => {
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
       <div className="max-w-2xl mx-auto">
         <button
-            onClick={() => navigate(`/expenses/${expenseId}`)}
-            className="mb-6 inline-flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-500"
+          onClick={() => navigate(`/expenses/${expenseId}`)}
+          className="mb-6 inline-flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-500"
         >
-            <ArrowLeftIcon className="h-5 w-5 mr-1" />
-            Back to Expense Details
+          <ArrowLeftIcon className="h-5 w-5 mr-1" />
+          Back to Expense Details
         </button>
 
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-8">Edit Expense</h1>
-        
+
         <form onSubmit={handleSubmit} className="bg-white shadow-xl rounded-lg p-6 sm:p-8 space-y-6">
           <div>
             <label htmlFor="description" className="block text-sm font-medium text-gray-700">
@@ -265,7 +265,7 @@ const ExpenseEditPage: React.FC = () => {
               ))}
             </select>
           </div>
-          
+
           <div>
             <label htmlFor="paidBy" className="block text-sm font-medium text-gray-700">
               Paid by <span className="text-red-500">*</span>
@@ -293,31 +293,31 @@ const ExpenseEditPage: React.FC = () => {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Participants
             </label>
-             <p className="text-xs text-gray-500 mb-2">
-                Select users involved in this expense. The payer will be automatically included.
+            <p className="text-xs text-gray-500 mb-2">
+              Select users involved in this expense. The payer will be automatically included.
             </p>
-            <input 
-                type="text"
-                placeholder="Search participants..."
-                value={participantSearchTerm}
-                onChange={(e) => setParticipantSearchTerm(e.target.value)}
-                className="mb-3 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+            <input
+              type="text"
+              placeholder="Search participants..."
+              value={participantSearchTerm}
+              onChange={(e) => setParticipantSearchTerm(e.target.value)}
+              className="mb-3 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
             />
             <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-md p-2 space-y-1 bg-gray-50">
               {loadingInitialData && availableUsers.length === 0 && <p className="text-sm text-gray-500">Loading participants...</p>}
               {filteredParticipantPool.filter(p => p.id !== paidByUserId).map((participant) => ( // Exclude payer from selectable list
-                  <label
-                    key={participant.id}
-                    className="flex items-center space-x-3 p-2 hover:bg-indigo-50 rounded-md cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={participantUserIds.includes(participant.id)}
-                      onChange={() => handleParticipantSelection(participant.id)}
-                      className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                    />
-                    <span className="text-sm text-gray-700">{participant.username || participant.email}</span>
-                  </label>
+                <label
+                  key={participant.id}
+                  className="flex items-center space-x-3 p-2 hover:bg-indigo-50 rounded-md cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={participantUserIds.includes(participant.id)}
+                    onChange={() => handleParticipantSelection(participant.id)}
+                    className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                  />
+                  <span className="text-sm text-gray-700">{participant.username || participant.email}</span>
+                </label>
               ))}
               {filteredParticipantPool.length === 0 && !loadingInitialData && <p className="text-sm text-gray-500 p-2">No matching participants found.</p>}
             </div>

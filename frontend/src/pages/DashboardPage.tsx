@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
-import { DefaultService, ExpenseRead } from '../generated/api'; // Assuming ExpenseRead is the correct type
+import { DefaultService, type ExpenseRead } from '../generated/api'; // Assuming ExpenseRead is the correct type
 import { PlusCircleIcon, UserGroupIcon, DocumentTextIcon, ArrowRightIcon } from '@heroicons/react/24/outline'; // Example icons
 
 const DashboardPage: React.FC = () => {
@@ -74,7 +74,7 @@ const DashboardPage: React.FC = () => {
   if (loading && !user) { // Initial load or if user is not yet available
     return <div className="text-center py-10">Loading user data...</div>;
   }
-  
+
   if (!user) { // Should be caught by ProtectedRoute, but as a safeguard
     return <div className="text-center py-10">Please log in to view the dashboard.</div>;
   }
@@ -108,7 +108,7 @@ const DashboardPage: React.FC = () => {
           </div>
           <div className="bg-white p-6 rounded-lg shadow-md">
             <h3 className="text-lg font-medium text-gray-900">Total You Owe (Simplified)</h3>
-             {/* This is a very simplified view. True amount user owes requires summing up their shares. */}
+            {/* This is a very simplified view. True amount user owes requires summing up their shares. */}
             <p className="text-3xl font-semibold text-red-600 mt-2">
               {/* Sum of amounts of expenses where user participated and others paid */}
               ${expensesIOwe.reduce((sum, exp) => sum + exp.amount, 0).toFixed(2)}
@@ -116,10 +116,10 @@ const DashboardPage: React.FC = () => {
             <p className="text-sm text-gray-500 mt-1">Across {expensesIOwe.length} expenses others paid for</p>
           </div>
         </div>
-         <p className="text-sm text-gray-600 mt-4">
-            Net balance calculation is complex and involves detailed share tracking per expense. 
-            The above "Total You Are Owed" and "Total You Owe" are based on full expense amounts where you are involved, not your specific shares.
-          </p>
+        <p className="text-sm text-gray-600 mt-4">
+          Net balance calculation is complex and involves detailed share tracking per expense.
+          The above "Total You Are Owed" and "Total You Owe" are based on full expense amounts where you are involved, not your specific shares.
+        </p>
       </section>
 
       {/* Quick Links/Actions */}
@@ -162,11 +162,11 @@ const DashboardPage: React.FC = () => {
                         <div className="sm:flex">
                           <p className="flex items-center text-sm text-gray-500">
                             <DocumentTextIcon className="flex-shrink-0 mr-1.5 h-5 w-5 text-gray-400" aria-hidden="true" />
-                            Paid by: {expense.paid_by_user_id === user.id ? 'You' : expense.payer?.username || 'N/A'} 
+                            Paid by: {expense.paid_by_user_id === user.id ? 'You' : expense.payer?.username || 'N/A'}
                             {/* Assuming payer object with username might be part of ExpenseRead, or needs fetching */}
                           </p>
                           {expense.group && (
-                             <p className="mt-2 flex items-center text-sm text-gray-500 sm:mt-0 sm:ml-6">
+                            <p className="mt-2 flex items-center text-sm text-gray-500 sm:mt-0 sm:ml-6">
                               <UserGroupIcon className="flex-shrink-0 mr-1.5 h-5 w-5 text-gray-400" aria-hidden="true" />
                               Group: {expense.group.name}
                             </p>
@@ -174,7 +174,7 @@ const DashboardPage: React.FC = () => {
                         </div>
                         <div className="mt-2 flex items-center text-sm text-gray-500 sm:mt-0">
                           <p>{new Date(expense.date).toLocaleDateString()}</p>
-                           <ArrowRightIcon className="ml-2 h-4 w-4 text-gray-400" />
+                          <ArrowRightIcon className="ml-2 h-4 w-4 text-gray-400" />
                         </div>
                       </div>
                     </div>
@@ -184,12 +184,12 @@ const DashboardPage: React.FC = () => {
             </ul>
           </div>
         )}
-        { !loading && !error && expenses.length > 5 && (
-            <div className="mt-4 text-center">
-                <Link to="/expenses" className="text-sm font-medium text-indigo-600 hover:text-indigo-500">
-                    View all expenses <span aria-hidden="true">&rarr;</span>
-                </Link>
-            </div>
+        {!loading && !error && expenses.length > 5 && (
+          <div className="mt-4 text-center">
+            <Link to="/expenses" className="text-sm font-medium text-indigo-600 hover:text-indigo-500">
+              View all expenses <span aria-hidden="true">&rarr;</span>
+            </Link>
+          </div>
         )}
       </section>
     </div>

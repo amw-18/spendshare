@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'; // Added useEffect
 import { useNavigate, useLocation } from 'react-router-dom'; // Added useLocation
-import { DefaultService, Body_login_for_access_token_api_v1_users_token_post, OpenAPI } from '../generated/api';
+import { DefaultService, type Body_login_for_access_token_api_v1_users_token_post, OpenAPI } from '../generated/api';
 import { useAuthStore } from '../store/authStore';
 
 const LoginPage: React.FC = () => {
@@ -42,7 +42,7 @@ const LoginPage: React.FC = () => {
       // It seems Body_login_for_access_token_api_v1_users_token_post is just an interface
       // and the actual request object should be passed. The service method should handle the content type.
       // Re-checking the openapi-typescript-codegen typical output, it usually expects an object.
-      
+
       const requestBody: Body_login_for_access_token_api_v1_users_token_post = {
         username,
         password,
@@ -69,7 +69,7 @@ const LoginPage: React.FC = () => {
 
       // Store the token and user details
       setToken(token, user);
-      
+
       // Redirect to the intended destination or dashboard
       const from = location.state?.from?.pathname || '/dashboard';
       navigate(from, { replace: true });

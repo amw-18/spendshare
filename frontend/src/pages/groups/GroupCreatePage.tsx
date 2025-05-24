@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DefaultService, GroupCreate } from '../../generated/api';
+import { DefaultService, type GroupCreate } from '../../generated/api';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 
 const GroupCreatePage: React.FC = () => {
@@ -51,15 +51,15 @@ const GroupCreatePage: React.FC = () => {
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
       <div className="max-w-2xl mx-auto">
         <button
-            onClick={() => navigate('/groups')}
-            className="mb-6 inline-flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-500"
+          onClick={() => navigate('/groups')}
+          className="mb-6 inline-flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-500"
         >
-            <ArrowLeftIcon className="h-5 w-5 mr-1" />
-            Back to Groups
+          <ArrowLeftIcon className="h-5 w-5 mr-1" />
+          Back to Groups
         </button>
 
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-6">Create New Group</h1>
-        
+
         <form onSubmit={handleSubmit} className="bg-white shadow-md rounded-lg p-6 space-y-6">
           <div>
             <label htmlFor="groupName" className="block text-sm font-medium text-gray-700">

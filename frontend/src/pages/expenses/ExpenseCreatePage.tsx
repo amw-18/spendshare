@@ -2,10 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   DefaultService,
-  GroupRead,
-  UserRead,
-  ExpenseCreate,
-  Body_create_expense_with_participants_endpoint_api_v1_expenses_service__post as ExpenseWithParticipantsCreate,
+  type GroupRead,
+  type UserRead,
+  type ExpenseCreate,
+  type Body_create_expense_with_participants_endpoint_api_v1_expenses_service__post as ExpenseWithParticipantsCreate,
 } from '../../generated/api';
 import { useAuthStore } from '../../store/authStore';
 import { ArrowLeftIcon, CheckCircleIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
@@ -24,7 +24,7 @@ const ExpenseCreatePage: React.FC = () => {
   // Data for selects/options
   const [userGroups, setUserGroups] = useState<GroupRead[]>([]);
   const [availableParticipants, setAvailableParticipants] = useState<UserRead[]>([]);
-  
+
   // UI state
   const [loading, setLoading] = useState<boolean>(false); // For form submission
   const [loadingInitialData, setLoadingInitialData] = useState<boolean>(true);
@@ -47,7 +47,7 @@ const ExpenseCreatePage: React.FC = () => {
         // Fetch all users for now. If a group is selected, we can filter later.
         // Or, if group members are easily fetchable on group selection, that's an optimization.
         const usersPromise = DefaultService.readUsersApiV1UsersGet({});
-        
+
         const [groupsResponse, usersResponse] = await Promise.all([groupsPromise, usersPromise]);
         setUserGroups(groupsResponse);
         setAvailableParticipants(usersResponse);
@@ -58,24 +58,24 @@ const ExpenseCreatePage: React.FC = () => {
         // For now, users are fetched, and they can manually select participants.
         // If groupIdFromUrl is present, we could fetch its members to refine participant list.
         if (groupIdFromUrl && !isNaN(parseInt(groupIdFromUrl))) {
-            const numGroupId = parseInt(groupIdFromUrl);
-            // Attempt to fetch members for the pre-selected group to narrow down participant list
-            try {
-                const groupMembers = await DefaultService.readGroupMembersApiV1GroupsGroupIdMembersGet({ groupId: numGroupId });
-                setAvailableParticipants(groupMembers);
-                 // Automatically select all members of the pre-selected group initially, excluding current user
-                if (currentUser) {
-                    setParticipantUserIds(groupMembers.filter(m => m.id !== currentUser.id).map(m => m.id));
-                } else {
-                    setParticipantUserIds(groupMembers.map(m => m.id));
-                }
-
-            } catch (memberErr) {
-                console.warn("Could not fetch members for pre-selected group, using all users as participants pool.", memberErr);
-                // Fallback to all users if member fetching fails
-                const allUsers = await DefaultService.readUsersApiV1UsersGet({});
-                setAvailableParticipants(allUsers);
+          const numGroupId = parseInt(groupIdFromUrl);
+          // Attempt to fetch members for the pre-selected group to narrow down participant list
+          try {
+            const groupMembers = await DefaultService.readGroupMembersApiV1GroupsGroupIdMembersGet({ groupId: numGroupId });
+            setAvailableParticipants(groupMembers);
+            // Automatically select all members of the pre-selected group initially, excluding current user
+            if (currentUser) {
+              setParticipantUserIds(groupMembers.filter(m => m.id !== currentUser.id).map(m => m.id));
+            } else {
+              setParticipantUserIds(groupMembers.map(m => m.id));
             }
+
+          } catch (memberErr) {
+            console.warn("Could not fetch members for pre-selected group, using all users as participants pool.", memberErr);
+            // Fallback to all users if member fetching fails
+            const allUsers = await DefaultService.readUsersApiV1UsersGet({});
+            setAvailableParticipants(allUsers);
+          }
         }
 
 
@@ -118,7 +118,7 @@ const ExpenseCreatePage: React.FC = () => {
         .then(setAvailableParticipants)
         .catch(() => setError("Failed to load users for participant selection."))
         .finally(() => setLoadingInitialData(false));
-        setParticipantUserIds([]); // Clear participants if no group selected
+      setParticipantUserIds([]); // Clear participants if no group selected
     }
   }, [selectedGroupId, currentUser]);
 
@@ -143,18 +143,18 @@ const ExpenseCreatePage: React.FC = () => {
       return;
     }
     if (!currentUser?.id) {
-        setError('User not authenticated. Cannot create expense.');
-        return;
+      setError('User not authenticated. Cannot create expense.');
+      return;
     }
     // Ensure current user (payer) is included if participants are selected
     let finalParticipantIds = [...participantUserIds];
     if (finalParticipantIds.length > 0 && !finalParticipantIds.includes(currentUser.id)) {
-        finalParticipantIds.push(currentUser.id);
+      finalParticipantIds.push(currentUser.id);
     }
     // If no participants were selected, it means only the payer is involved.
     // The backend service might expect at least the payer in participant_user_ids.
     if (finalParticipantIds.length === 0) {
-        finalParticipantIds.push(currentUser.id);
+      finalParticipantIds.push(currentUser.id);
     }
 
 
@@ -184,7 +184,7 @@ const ExpenseCreatePage: React.FC = () => {
       console.error("Failed to create expense:", err);
       if (err.body && err.body.detail) {
         if (Array.isArray(err.body.detail)) {
-          setError(err.body.detail.map((d: any) => `${d.loc?.[d.loc.length-1] || 'Error'}: ${d.msg}`).join('; '));
+          setError(err.body.detail.map((d: any) => `${d.loc?.[d.loc.length - 1] || 'Error'}: ${d.msg}`).join('; '));
         } else {
           setError(err.body.detail);
         }
@@ -195,8 +195,8 @@ const ExpenseCreatePage: React.FC = () => {
       setLoading(false);
     }
   };
-  
-  const filteredParticipants = availableParticipants.filter(p => 
+
+  const filteredParticipants = availableParticipants.filter(p =>
     p.username?.toLowerCase().includes(participantSearchTerm.toLowerCase()) ||
     p.email.toLowerCase().includes(participantSearchTerm.toLowerCase())
   );
@@ -213,15 +213,15 @@ const ExpenseCreatePage: React.FC = () => {
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
       <div className="max-w-2xl mx-auto">
         <button
-            onClick={() => navigate(selectedGroupId ? `/groups/${selectedGroupId}` : '/dashboard')}
-            className="mb-6 inline-flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-500"
+          onClick={() => navigate(selectedGroupId ? `/groups/${selectedGroupId}` : '/dashboard')}
+          className="mb-6 inline-flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-500"
         >
-            <ArrowLeftIcon className="h-5 w-5 mr-1" />
-            {selectedGroupId ? 'Back to Group' : 'Back to Dashboard'}
+          <ArrowLeftIcon className="h-5 w-5 mr-1" />
+          {selectedGroupId ? 'Back to Group' : 'Back to Dashboard'}
         </button>
 
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-8">Create New Expense</h1>
-        
+
         <form onSubmit={handleSubmit} className="bg-white shadow-xl rounded-lg p-6 sm:p-8 space-y-6">
           <div>
             <label htmlFor="description" className="block text-sm font-medium text-gray-700">
@@ -282,20 +282,20 @@ const ExpenseCreatePage: React.FC = () => {
               Participants
             </label>
             <p className="text-xs text-gray-500 mb-2">
-                {selectedGroupId ? "Select from group members." : "Select from all users."} You (payer) will be automatically included.
+              {selectedGroupId ? "Select from group members." : "Select from all users."} You (payer) will be automatically included.
             </p>
-            <input 
-                type="text"
-                placeholder="Search participants by name or email..."
-                value={participantSearchTerm}
-                onChange={(e) => setParticipantSearchTerm(e.target.value)}
-                className="mb-3 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+            <input
+              type="text"
+              placeholder="Search participants by name or email..."
+              value={participantSearchTerm}
+              onChange={(e) => setParticipantSearchTerm(e.target.value)}
+              className="mb-3 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
             />
             {loadingInitialData && availableParticipants.length === 0 && <p className="text-sm text-gray-500">Loading participants...</p>}
             <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-md p-2 space-y-1 bg-gray-50">
               {filteredParticipants.length > 0 ? filteredParticipants.map((participant) => (
                 // Exclude current user from selectable list as they are the payer and auto-included
-                participant.id !== currentUser?.id && ( 
+                participant.id !== currentUser?.id && (
                   <label
                     key={participant.id}
                     className="flex items-center space-x-3 p-2 hover:bg-indigo-50 rounded-md cursor-pointer"

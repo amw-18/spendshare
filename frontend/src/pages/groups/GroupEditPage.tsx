@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { DefaultService, GroupRead, GroupUpdate } from '../../generated/api';
+import { DefaultService, type GroupRead, type GroupUpdate } from '../../generated/api';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 
 const GroupEditPage: React.FC = () => {
@@ -10,7 +10,7 @@ const GroupEditPage: React.FC = () => {
   const [group, setGroup] = useState<GroupRead | null>(null);
   const [groupName, setGroupName] = useState('');
   const [groupDescription, setGroupDescription] = useState('');
-  
+
   const [loading, setLoading] = useState<boolean>(true); // For initial data fetch
   const [submitting, setSubmitting] = useState<boolean>(false); // For form submission
   const [error, setError] = useState<string | null>(null); // For any error messages
@@ -24,9 +24,9 @@ const GroupEditPage: React.FC = () => {
 
     const numericGroupId = parseInt(groupId, 10);
     if (isNaN(numericGroupId)) {
-        setError("Invalid Group ID format.");
-        setLoading(false);
-        return;
+      setError("Invalid Group ID format.");
+      setLoading(false);
+      return;
     }
 
     setLoading(true);
@@ -68,9 +68,9 @@ const GroupEditPage: React.FC = () => {
     };
 
     try {
-      await DefaultService.updateGroupApiV1GroupsGroupIdPut({ 
-        groupId: numericGroupId, 
-        requestBody: updatedGroupData 
+      await DefaultService.updateGroupApiV1GroupsGroupIdPut({
+        groupId: numericGroupId,
+        requestBody: updatedGroupData
       });
       navigate(`/groups/${numericGroupId}`); // Redirect to group detail page
     } catch (err: any) {
@@ -88,7 +88,7 @@ const GroupEditPage: React.FC = () => {
       setSubmitting(false);
     }
   };
-  
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -105,16 +105,16 @@ const GroupEditPage: React.FC = () => {
           <span className="block sm:inline">{error}</span>
         </div>
         <button
-            onClick={() => navigate(groupId ? `/groups/${groupId}` : '/groups')}
-            className="inline-flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-500"
+          onClick={() => navigate(groupId ? `/groups/${groupId}` : '/groups')}
+          className="inline-flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-500"
         >
-            <ArrowLeftIcon className="h-5 w-5 mr-1" />
-            {groupId ? 'Back to Group Details' : 'Back to Groups'}
+          <ArrowLeftIcon className="h-5 w-5 mr-1" />
+          {groupId ? 'Back to Group Details' : 'Back to Groups'}
         </button>
       </div>
     );
   }
-  
+
   if (!group) { // Should be covered by loading or error state if fetch fails
     return <div className="container mx-auto p-4 text-center">Group data not available.</div>;
   }
@@ -124,15 +124,15 @@ const GroupEditPage: React.FC = () => {
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
       <div className="max-w-2xl mx-auto">
         <button
-            onClick={() => navigate(`/groups/${groupId}`)}
-            className="mb-6 inline-flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-500"
+          onClick={() => navigate(`/groups/${groupId}`)}
+          className="mb-6 inline-flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-500"
         >
-            <ArrowLeftIcon className="h-5 w-5 mr-1" />
-            Back to Group Details
+          <ArrowLeftIcon className="h-5 w-5 mr-1" />
+          Back to Group Details
         </button>
 
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-6">Edit Group</h1>
-        
+
         <form onSubmit={handleSubmit} className="bg-white shadow-md rounded-lg p-6 space-y-6">
           <div>
             <label htmlFor="groupName" className="block text-sm font-medium text-gray-700">
