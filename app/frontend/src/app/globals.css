@@ -1,0 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  /* You can add base body styling here if needed */
+  /* For example, a default background color for the app */
+  /* background-color: #f4f7f6; */
+}
