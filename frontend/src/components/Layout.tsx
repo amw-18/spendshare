@@ -12,6 +12,7 @@ const SpendShareLogo = () => (
     <svg fill="none" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
       <path
         d="M38 12H10C7.79086 12 6 13.7909 6 16V34C6 36.2091 7.79086 38 10 38H38C40.2091 38 42 36.2091 42 34V16C42 13.7909 40.2091 12 38 12Z"
+        fill="rgba(22, 17, 34, 0.8)"
         stroke="#7847EA" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3"
       ></path>
       <path
