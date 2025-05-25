@@ -4,6 +4,7 @@
 /* eslint-disable */
 
 import type { ExpenseParticipantReadWithUser } from './ExpenseParticipantReadWithUser';
+import type { UserRead } from './UserRead';
 
 export type ExpenseRead = {
     description?: string;
@@ -12,6 +13,7 @@ export type ExpenseRead = {
     id: number;
     date: string;
     paid_by_user_id?: (number | null);
+    paid_by_user?: (UserRead | null);
     participant_details?: Array<ExpenseParticipantReadWithUser>;
 };
 

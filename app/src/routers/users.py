@@ -9,7 +9,7 @@ from fastapi.security import (
     OAuth2PasswordRequestForm,
 )  # Added OAuth2PasswordRequestForm
 from sqlmodel.ext.asyncio.session import AsyncSession
-from sqlmodel import select
+from sqlmodel import select, or_  # Added or_
 
 from src.db.database import get_session
 from src.models import models  # Used as models.User in type hints
@@ -81,6 +81,32 @@ async def read_users_endpoint(
         )
     # Logic from crud_user.get_users
     statement = select(User).offset(skip).limit(limit)
+    result = await session.exec(statement)
+    users = list(result)
+    return users
+
+
+@router.get("/search", response_model=List[schemas.UserRead])
+async def search_users_endpoint(
+    *,
+    query: str,  # Search query for username or email
+    session: AsyncSession = Depends(get_session),
+    current_user: models.User = Depends(get_current_user),  # Ensure user is authenticated
+) -> List[models.User]:
+    """
+    Search for users by username or email.
+    Returns a list of users matching the query.
+    Accessible to any authenticated user.
+    """
+    if not query or len(query) < 2: # Add minimum query length
+        return []  # Return empty list if query is empty or too short
+
+    statement = (
+        select(User)
+        .where(or_(User.username.ilike(f"%{query}%"), User.email.ilike(f"%{query}%")))
+        .limit(20)  # Limit results
+    )
+
     result = await session.exec(statement)
     users = list(result)
     return users

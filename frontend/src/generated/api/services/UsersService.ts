@@ -59,6 +59,30 @@ export class UsersService {
     }
 
     /**
+     * Search Users Endpoint
+     * Search for users by username or email.
+     * Returns a list of users matching the query.
+     * Accessible to any authenticated user.
+     * @param query
+     * @returns UserRead Successful Response
+     * @throws ApiError
+     */
+    public static searchUsersEndpointApiV1UsersSearchGet(
+        query: string,
+    ): CancelablePromise<Array<UserRead>> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/users/search',
+            query: {
+                'query': query,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+
+    /**
      * Read Current User Me Endpoint
      * Get current logged-in user.
      * @returns UserRead Successful Response

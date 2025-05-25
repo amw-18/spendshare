@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Body, status  # Added sta
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import select, delete
 from sqlalchemy import or_
+from sqlalchemy.orm import selectinload  # Added selectinload
 
 from src.db.database import get_session
 from src.models import models  # Used as models.Expense in type hints
@@ -161,9 +162,18 @@ async def read_expense_endpoint(
 ) -> (
     models.Expense
 ):  # Keep models.Expense as per original, though schemas.ExpenseRead is what's returned
-    db_expense_obj = await get_object_or_404(session, Expense, expense_id)
+    statement = (
+        select(models.Expense)
+        .where(models.Expense.id == expense_id)
+        .options(selectinload(models.Expense.paid_by), selectinload(models.Expense.participants))
+    )
+    result = await session.exec(statement)
+    db_expense = result.first()
 
-    if not current_user.is_admin and db_expense_obj.paid_by_user_id != current_user.id:
+    if not db_expense:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expense not found")
+
+    if not current_user.is_admin and db_expense.paid_by_user_id != current_user.id:
         # Check if current_user is a participant in the expense
         participant_exists_statement = select(ExpenseParticipant).where(
             ExpenseParticipant.expense_id == expense_id,
@@ -177,7 +187,7 @@ async def read_expense_endpoint(
             )
 
     # Manually construct and return ExpenseRead with participant_details
-    return await _get_expense_read_details(session=session, db_expense=db_expense_obj)
+    return await _get_expense_read_details(session=session, db_expense=db_expense)
 
 
 @router.put("/{expense_id}", response_model=schemas.ExpenseRead)
@@ -377,5 +387,14 @@ async def _get_expense_read_details(
     # Create ExpenseRead object
     expense_read_data = schemas.ExpenseRead.model_validate(db_expense)
     expense_read_data.participant_details = participant_details_list
+    # Ensure paid_by_user is populated if it was loaded
+    if db_expense.paid_by:
+        expense_read_data.paid_by_user = schemas.UserRead.model_validate(db_expense.paid_by)
+    else:
+        # This case implies paid_by_user_id was null or the user object couldn't be loaded.
+        # If paid_by_user_id is not null, we might need to fetch it explicitly if not loaded.
+        # However, selectinload should handle this. If paid_by_user is None here, it's likely
+        # because paid_by_user_id was indeed NULL in the database for this expense.
+        expense_read_data.paid_by_user = None 
 
     return expense_read_data

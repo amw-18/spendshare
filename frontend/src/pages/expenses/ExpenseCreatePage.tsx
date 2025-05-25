@@ -1,5 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import Select from 'react-select';
+import type {
+  StylesConfig,
+  ControlProps,
+  OptionProps,
+  GroupBase,
+  SingleValue
+} from 'react-select';
 import {
   ExpensesService,
   GroupsService,
@@ -11,7 +19,70 @@ import {
 } from '../../generated/api';
 import { useAuthStore } from '../../store/authStore';
 import { ArrowLeftIcon, CheckCircleIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
-import CustomDropdown from '../../components/CustomDropdown';
+
+interface BaseOptionType {
+  value: number | string | null;
+  label: string;
+}
+
+interface GroupOptionType extends BaseOptionType {
+  value: number | null;
+}
+
+const customStyles: StylesConfig<BaseOptionType, false, GroupBase<BaseOptionType>> = {
+  control: (base, props: ControlProps<BaseOptionType, false, GroupBase<BaseOptionType>>) => ({
+    ...base,
+    backgroundColor: '#100c1c',
+    borderColor: props.isFocused ? '#7847ea' : '#2f2447',
+    boxShadow: props.isFocused ? '0 0 0 1px #7847ea' : 'none',
+    borderRadius: '0.5rem', 
+    padding: '0.1rem', 
+    minHeight: '42px', 
+    '&:hover': {
+      borderColor: props.isFocused ? '#7847ea' : '#433465',
+    },
+  }),
+  valueContainer: (base) => ({
+    ...base,
+    padding: '0px 6px', 
+  }),
+  input: (base) => ({
+    ...base,
+    color: 'white',
+    margin: '0px',
+    padding: '0px',
+  }),
+  singleValue: (base) => ({
+    ...base,
+    color: 'white',
+  }),
+  placeholder: (base) => ({
+    ...base,
+    color: '#6b7280', 
+  }),
+  menu: (base) => ({
+    ...base,
+    backgroundColor: '#1c152b', 
+    border: '1px solid #2f2447',
+    borderRadius: '0.5rem',
+  }),
+  option: (base, props: OptionProps<BaseOptionType, false, GroupBase<BaseOptionType>>) => ({
+    ...base,
+    backgroundColor: props.isSelected ? '#7847ea' : props.isFocused ? '#211a32' : '#1c152b',
+    color: 'white',
+    '&:active': {
+      backgroundColor: '#6c3ddb',
+    },
+  }),
+  indicatorSeparator: (base) => ({ ...base, display: 'none' }), 
+  dropdownIndicator: (base) => ({
+    ...base,
+    color: '#a393c8',
+    '&:hover': {
+      color: 'white',
+    }
+  }),
+};
 
 const ExpenseCreatePage: React.FC = () => {
   const navigate = useNavigate();
@@ -248,12 +319,25 @@ const ExpenseCreatePage: React.FC = () => {
               Group (Optional)
             </label>
             <div className="mt-1">
-              <CustomDropdown
+              <Select<GroupOptionType, false, GroupBase<GroupOptionType>>
                 id="groupId"
-                options={userGroups.map(group => ({ value: group.id, label: group.name }))}
-                value={selectedGroupId}
-                onChange={(value) => setSelectedGroupId(value as number | null)}
-                placeholder="Select a group..."
+                name="groupId"
+                options={[
+                  { value: null, label: 'No Group (Personal Expense)' }, 
+                  ...userGroups.map(group => ({ value: group.id as number, label: group.name }))
+                ]}
+                value={[
+                  { value: null, label: 'No Group (Personal Expense)' }, 
+                  ...userGroups.map(group => ({ value: group.id as number, label: group.name }))
+                ].find(option => option.value === selectedGroupId) || null}
+                onChange={(selectedOption: SingleValue<GroupOptionType>) => {
+                  setSelectedGroupId(selectedOption ? selectedOption.value : null);
+                }}
+                styles={customStyles as StylesConfig<GroupOptionType, false, GroupBase<GroupOptionType>>}
+                isClearable={true}
+                placeholder="Select a group or leave empty..."
+                className="w-full text-sm"
+                isDisabled={loadingInitialData}
               />
             </div>
           </div>

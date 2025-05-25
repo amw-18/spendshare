@@ -114,6 +114,7 @@ class ExpenseRead(ExpenseBase):
     id: int
     date: datetime
     paid_by_user_id: Optional[int] = None
+    paid_by_user: Optional[UserRead] = None
     description: str = Field(default="") 
     participant_details: List["ExpenseParticipantReadWithUser"] = [] 
 
