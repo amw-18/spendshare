@@ -4,5 +4,6 @@
 /* eslint-disable */
 export type ParticipantUpdate = {
     user_id: number;
+    share_amount?: (number | null);
 };
 
