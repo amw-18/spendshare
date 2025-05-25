@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { DefaultService, type ExpenseRead, type UserRead } from '../generated/api';
+import { ExpensesService, UsersService } from '../generated/api';
+import { type ExpenseRead, type UserRead } from '../generated/api';
 import { useAuthStore } from '../store/authStore';
 import { PlusCircleIcon, DocumentTextIcon, UserGroupIcon, ChevronRightIcon, CalendarDaysIcon, UserCircleIcon } from '@heroicons/react/24/outline';
 
@@ -25,7 +26,8 @@ const ExpenseListPage: React.FC = () => {
       setError(null);
       try {
         // Fetch expenses where the user is involved
-        const fetchedExpenses = await DefaultService.readExpensesApiV1ExpensesGet({ userId: currentUser.id });
+        // Parameters for readExpensesEndpointApiV1ExpensesGet: skip?: number, limit?: number, userId?: number | null, groupId?: number | null
+        const fetchedExpenses = await ExpensesService.readExpensesEndpointApiV1ExpensesGet(undefined, undefined, currentUser.id, undefined);
         setExpenses(fetchedExpenses.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())); // Sort by date descending
 
         // Collect all unique user IDs from expenses (payers and participants) to fetch their details if needed
@@ -41,7 +43,8 @@ const ExpenseListPage: React.FC = () => {
           // This could be inefficient if there are many users.
           // A better approach would be a dedicated endpoint like /api/v1/users/batch?ids=1,2,3
           try {
-            const allUsers = await DefaultService.readUsersApiV1UsersGet({}); // Fetch all users
+            // Parameters for readUsersEndpointApiV1UsersGet: skip?: number, limit?: number
+            const allUsers = await UsersService.readUsersEndpointApiV1UsersGet(undefined, undefined); // Fetch all users (or default limit)
             const map: Record<number, UserRead> = {};
             allUsers.forEach(u => { map[u.id] = u; });
             setUsersMap(map);

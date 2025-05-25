@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
-import { DefaultService, type ExpenseRead } from '../generated/api'; // Assuming ExpenseRead is the correct type
+import { ExpensesService } from '../generated/api';
+import { type ExpenseRead } from '../generated/api'; // Assuming ExpenseRead is the correct type
 import { PlusCircleIcon, UserGroupIcon, DocumentTextIcon, ArrowRightIcon } from '@heroicons/react/24/outline'; // Example icons
 
 const DashboardPage: React.FC = () => {
@@ -34,7 +35,7 @@ const DashboardPage: React.FC = () => {
           // or it returns all expenses accessible to the user.
           // The schema shows `user_id: number (Query)` for `read_expenses_api_v1_expenses_get`.
           // This suggests it's for filtering expenses *related* to the user.
-          const response = await DefaultService.readExpensesApiV1ExpensesGet({ userId: user.id });
+          const response = await ExpensesService.readExpensesEndpointApiV1ExpensesGet(undefined, 100, user.id); // skip, limit, userId
           setExpenses(response);
 
           // Calculate summaries
