@@ -1,8 +1,10 @@
-/* generated using openapi-typescript-codegen -- do not edit */
+/* generated using openapi-typescript-codegen -- do no edit */
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+
 import type { UserRead } from './UserRead';
+
 export type ExpenseParticipantReadWithUser = {
     user_id: number;
     expense_id: number;

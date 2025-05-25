@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
-  DefaultService,
+  ExpensesService,
+  GroupsService,
+  UsersService,
   type ExpenseRead,
   type GroupRead,
   type UserRead,
@@ -37,14 +39,14 @@ const ExpenseDetailPage: React.FC = () => {
     }
 
     setLoading(true);
-    DefaultService.readExpenseApiV1ExpensesExpenseIdGet({ expenseId: numericExpenseId })
+    ExpensesService.readExpenseEndpointApiV1ExpensesExpenseIdGet(numericExpenseId)
       .then(async (expenseData) => {
         setExpense(expenseData);
 
         // Fetch group details if group_id is present
         if (expenseData.group_id) {
           try {
-            const groupData = await DefaultService.readGroupApiV1GroupsGroupIdGet({ groupId: expenseData.group_id });
+            const groupData = await GroupsService.readGroupEndpointApiV1GroupsGroupIdGet(expenseData.group_id);
             setGroup(groupData);
           } catch (groupErr) {
             console.error("Failed to fetch group details:", groupErr);
@@ -52,16 +54,10 @@ const ExpenseDetailPage: React.FC = () => {
           }
         }
 
-        // Resolve payer information
-        // The ExpenseRead schema has `payer: UserRead | null`. Let's use that first.
-        if (expenseData.payer) {
-          setPayer(expenseData.payer);
-        } else if (expenseData.paid_by_user_id) {
-          // Fallback: If payer object is null but paid_by_user_id exists, try to fetch the user
-          // This is a fallback and might indicate an API inconsistency or a need to improve user fetching strategy.
+        // Resolve payer information using paid_by_user_id
+        if (expenseData.paid_by_user_id) {
           try {
-            // This could be optimized by a batch user fetch if many such fallbacks occur.
-            const payerData = await DefaultService.readUserApiV1UsersUserIdGet({ userId: expenseData.paid_by_user_id });
+            const payerData = await UsersService.readUserEndpointApiV1UsersUserIdGet(expenseData.paid_by_user_id);
             setPayer(payerData);
           } catch (payerErr) {
             console.error("Failed to fetch payer details:", payerErr);
@@ -85,7 +81,7 @@ const ExpenseDetailPage: React.FC = () => {
     setIsDeleting(true);
     setError(null);
     try {
-      await DefaultService.deleteExpenseApiV1ExpensesExpenseIdDelete({ expenseId: parseInt(expenseId, 10) });
+      await ExpensesService.deleteExpenseEndpointApiV1ExpensesExpenseIdDelete(parseInt(expenseId, 10));
       navigate('/expenses'); // Redirect to expenses list on successful deletion
     } catch (err: any) {
       console.error("Failed to delete expense:", err);

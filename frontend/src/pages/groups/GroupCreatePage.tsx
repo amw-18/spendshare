@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DefaultService, type GroupCreate } from '../../generated/api';
+import { GroupsService, type GroupCreate } from '../../generated/api';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 
 const GroupCreatePage: React.FC = () => {
@@ -27,7 +27,7 @@ const GroupCreatePage: React.FC = () => {
     };
 
     try {
-      const newGroup = await DefaultService.createGroupApiV1GroupsPost(groupData);
+      await GroupsService.createGroupEndpointApiV1GroupsPost(groupData);
       // Redirect to the new group's detail page or the list page
       // For now, redirecting to the list page as per subtask simplicity suggestion.
       // navigate(`/groups/${newGroup.id}`); 

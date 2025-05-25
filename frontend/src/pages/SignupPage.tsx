@@ -1,19 +1,17 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DefaultService, type UserCreate } from '../generated/api';
+import { UsersService, type UserCreate } from '../generated/api';
 
 const SignupPage: React.FC = () => {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
-    setSuccessMessage(null);
 
     const userData: UserCreate = {
       username,
@@ -22,7 +20,7 @@ const SignupPage: React.FC = () => {
     };
 
     try {
-      await DefaultService.createUserApiV1UsersPost(userData);
+      await UsersService.createUserEndpointApiV1UsersPost(userData);
       // Store success message to be displayed on login page after redirect
       // For query parameter: navigate(`/login?signupSuccess=true`);
       // For state: navigate('/login', { state: { signupSuccessMessage: 'Signup successful! Please log in.' } });

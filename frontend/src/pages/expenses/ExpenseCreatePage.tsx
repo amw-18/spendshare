@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
-  DefaultService,
+  ExpensesService,
+  GroupsService,
+  UsersService,
   type GroupRead,
   type UserRead,
-  type ExpenseCreate,
   type Body_create_expense_with_participants_endpoint_api_v1_expenses_service__post as ExpenseWithParticipantsCreate,
+  type ExpenseCreate,
 } from '../../generated/api';
 import { useAuthStore } from '../../store/authStore';
 import { ArrowLeftIcon, CheckCircleIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
@@ -31,55 +33,41 @@ const ExpenseCreatePage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [participantSearchTerm, setParticipantSearchTerm] = useState('');
 
-
   // Fetch initial data (groups for dropdown, users for participants)
   useEffect(() => {
-    const queryParams = new URLSearchParams(location.search);
-    const groupIdFromUrl = queryParams.get('groupId');
-    if (groupIdFromUrl && !isNaN(parseInt(groupIdFromUrl))) {
-      setSelectedGroupId(parseInt(groupIdFromUrl, 10));
-    }
+    const params = new URLSearchParams(location.search);
+    const groupIdFromUrl = params.get('groupId');
 
     const fetchData = async () => {
       setLoadingInitialData(true);
       try {
-        const groupsPromise = DefaultService.readGroupsApiV1GroupsGet({});
-        // Fetch all users for now. If a group is selected, we can filter later.
-        // Or, if group members are easily fetchable on group selection, that's an optimization.
-        const usersPromise = DefaultService.readUsersApiV1UsersGet({});
+        const groupsPromise = GroupsService.readGroupsEndpointApiV1GroupsGet();
+        const usersPromise = UsersService.readUsersEndpointApiV1UsersGet();
 
         const [groupsResponse, usersResponse] = await Promise.all([groupsPromise, usersPromise]);
-        setUserGroups(groupsResponse);
-        setAvailableParticipants(usersResponse);
 
-        // If a group is pre-selected, try to set participants from that group.
-        // This assumes group objects from `readGroupsApiV1GroupsGet` do NOT contain member lists.
-        // We'd need another call to fetch members for the pre-selected group if we want to default participants.
-        // For now, users are fetched, and they can manually select participants.
-        // If groupIdFromUrl is present, we could fetch its members to refine participant list.
+        setUserGroups(groupsResponse);
+        setAvailableParticipants(usersResponse); // Default to all users
+
         if (groupIdFromUrl && !isNaN(parseInt(groupIdFromUrl))) {
           const numGroupId = parseInt(groupIdFromUrl);
-          // Attempt to fetch members for the pre-selected group to narrow down participant list
-          try {
-            const groupMembers = await DefaultService.readGroupMembersApiV1GroupsGroupIdMembersGet({ groupId: numGroupId });
-            setAvailableParticipants(groupMembers);
-            // Automatically select all members of the pre-selected group initially, excluding current user
-            if (currentUser) {
-              setParticipantUserIds(groupMembers.filter(m => m.id !== currentUser.id).map(m => m.id));
-            } else {
-              setParticipantUserIds(groupMembers.map(m => m.id));
-            }
-
-          } catch (memberErr) {
-            console.warn("Could not fetch members for pre-selected group, using all users as participants pool.", memberErr);
-            // Fallback to all users if member fetching fails
-            const allUsers = await DefaultService.readUsersApiV1UsersGet({});
-            setAvailableParticipants(allUsers);
+          setSelectedGroupId(numGroupId);
+          // NOTE: Cannot fetch specific group members with current API client.
+          // Participant list will remain all users. User can manually select.
+          // If current user exists, pre-select all *other* users by default.
+          if (currentUser) {
+            setParticipantUserIds(usersResponse.filter((u: UserRead) => u.id !== currentUser.id).map((u: UserRead) => u.id));
+          } else {
+            setParticipantUserIds(usersResponse.map((u: UserRead) => u.id));
           }
+        } else if (usersResponse.length > 0 && currentUser) {
+          // If no group pre-selected, and users exist, pre-select all *other* users by default.
+          setParticipantUserIds(usersResponse.filter((u: UserRead) => u.id !== currentUser.id).map((u: UserRead) => u.id));
+        } else if (usersResponse.length > 0) {
+          setParticipantUserIds(usersResponse.map((u: UserRead) => u.id));
         }
 
-
-      } catch (err) {
+      } catch (err: any) {
         console.error("Failed to fetch initial data:", err);
         setError("Failed to load necessary data. Please try refreshing.");
       } finally {
@@ -92,36 +80,43 @@ const ExpenseCreatePage: React.FC = () => {
   // Handle group selection change - fetch members for the selected group
   useEffect(() => {
     if (selectedGroupId !== null) {
-      setLoadingInitialData(true); // Show loading while participants are updated
-      DefaultService.readGroupMembersApiV1GroupsGroupIdMembersGet({ groupId: selectedGroupId })
-        .then(members => {
-          setAvailableParticipants(members);
-          // Auto-select all members of the newly selected group, excluding current user
+      setLoadingInitialData(true);
+      // NOTE: The functionality to fetch and filter participants by selected group
+      // is currently not possible due to missing API client method.
+      // We will continue to use all users as available participants.
+      // Re-fetch all users in case the list needs to be refreshed for some reason,
+      // though typically this wouldn't change often.
+      UsersService.readUsersEndpointApiV1UsersGet()
+        .then((allUsers: UserRead[]) => {
+          setAvailableParticipants(allUsers);
+          // If current user exists, pre-select all *other* users by default when group changes.
+          // This might not be ideal UX, but it's a placeholder until group member fetching is possible.
           if (currentUser) {
-            setParticipantUserIds(members.filter(m => m.id !== currentUser.id).map(m => m.id));
+            setParticipantUserIds(allUsers.filter((m: UserRead) => m.id !== currentUser.id).map((m: UserRead) => m.id));
           } else {
-            setParticipantUserIds(members.map(m => m.id));
+            setParticipantUserIds(allUsers.map((m: UserRead) => m.id));
           }
         })
-        .catch(err => {
-          console.error("Failed to fetch group members:", err);
-          setError("Failed to load members for the selected group. Participant list may be from all users.");
-          // Fallback to all users if specific group member fetch fails
-          DefaultService.readUsersApiV1UsersGet({}).then(setAvailableParticipants);
-          setParticipantUserIds([]); // Clear participants if group fetch failed
+        .catch((err: any) => {
+          console.error("Failed to re-fetch users:", err);
+          setError("Failed to load participant data. List may be incomplete.");
+        })
+        .finally(() => {
+          setLoadingInitialData(false);
+        });
+    } else {
+      // If no group is selected, ensure available participants are all users.
+      setLoadingInitialData(true);
+      UsersService.readUsersEndpointApiV1UsersGet()
+        .then(setAvailableParticipants)
+        .catch((err: any) => {
+          console.error("Failed to fetch users:", err);
+          setError("Failed to load participant data. List may be incomplete.");
         })
         .finally(() => setLoadingInitialData(false));
-    } else {
-      // No group selected, load all users for participant selection
-      setLoadingInitialData(true);
-      DefaultService.readUsersApiV1UsersGet({})
-        .then(setAvailableParticipants)
-        .catch(() => setError("Failed to load users for participant selection."))
-        .finally(() => setLoadingInitialData(false));
-      setParticipantUserIds([]); // Clear participants if no group selected
     }
-  }, [selectedGroupId, currentUser]);
-
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedGroupId, currentUser]); // currentUser added to re-evaluate participant IDs if user logs in/out
 
   const handleParticipantSelection = (userId: number) => {
     setParticipantUserIds((prev) =>
@@ -129,9 +124,12 @@ const ExpenseCreatePage: React.FC = () => {
     );
   };
 
-  const handleSubmit = async (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setError(null);
+    if (!currentUser) {
+      setError("You must be logged in to create an expense.");
+      return;
+    }
 
     if (!description.trim() || !amount) {
       setError('Description and Amount are required.');
@@ -142,38 +140,24 @@ const ExpenseCreatePage: React.FC = () => {
       setError('Amount must be a positive number.');
       return;
     }
-    if (!currentUser?.id) {
-      setError('User not authenticated. Cannot create expense.');
-      return;
-    }
-    // Ensure current user (payer) is included if participants are selected
-    let finalParticipantIds = [...participantUserIds];
-    if (finalParticipantIds.length > 0 && !finalParticipantIds.includes(currentUser.id)) {
-      finalParticipantIds.push(currentUser.id);
-    }
-    // If no participants were selected, it means only the payer is involved.
-    // The backend service might expect at least the payer in participant_user_ids.
-    if (finalParticipantIds.length === 0) {
-      finalParticipantIds.push(currentUser.id);
-    }
 
+    const expensePayload: ExpenseCreate = {
+      description,
+      amount: parseFloat(amount),
+      group_id: selectedGroupId !== null ? selectedGroupId : undefined,
+      // date will be set by backend default if not provided
+    };
+
+    const expenseData: ExpenseWithParticipantsCreate = {
+      expense_in: expensePayload, // Corrected key
+      participant_user_ids: participantUserIds,
+    };
 
     setLoading(true);
 
-    const expenseData: ExpenseCreate = {
-      description: description.trim(),
-      amount: numericAmount,
-      group_id: selectedGroupId ?? undefined, // Use undefined if null, API expects optional number
-      paid_by_user_id: currentUser.id, // Backend might fill this, but good to send if known
-    };
-
-    const payload: ExpenseWithParticipantsCreate = {
-      expense_in: expenseData,
-      participant_user_ids: finalParticipantIds,
-    };
-
     try {
-      await DefaultService.createExpenseWithParticipantsServiceApiV1ExpensesServicePost(payload);
+      setError(null);
+      await ExpensesService.createExpenseWithParticipantsEndpointApiV1ExpensesServicePost(expenseData);
       // Redirect after successful creation
       if (selectedGroupId) {
         navigate(`/groups/${selectedGroupId}`); // To group detail page
@@ -181,7 +165,7 @@ const ExpenseCreatePage: React.FC = () => {
         navigate('/expenses'); // To general expenses list (assuming it will exist)
       }
     } catch (err: any) {
-      console.error("Failed to create expense:", err);
+      console.error('Failed to create expense:', err);
       if (err.body && err.body.detail) {
         if (Array.isArray(err.body.detail)) {
           setError(err.body.detail.map((d: any) => `${d.loc?.[d.loc.length - 1] || 'Error'}: ${d.msg}`).join('; '));

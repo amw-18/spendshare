@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { DefaultService, type GroupRead, type GroupUpdate } from '../../generated/api';
+import { GroupsService, type GroupRead, type GroupUpdate } from '../../generated/api';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 
 const GroupEditPage: React.FC = () => {
@@ -9,7 +9,7 @@ const GroupEditPage: React.FC = () => {
 
   const [group, setGroup] = useState<GroupRead | null>(null);
   const [groupName, setGroupName] = useState('');
-  const [groupDescription, setGroupDescription] = useState('');
+  // const [groupDescription, setGroupDescription] = useState(''); // Description cannot be updated
 
   const [loading, setLoading] = useState<boolean>(true); // For initial data fetch
   const [submitting, setSubmitting] = useState<boolean>(false); // For form submission
@@ -30,11 +30,11 @@ const GroupEditPage: React.FC = () => {
     }
 
     setLoading(true);
-    DefaultService.readGroupApiV1GroupsGroupIdGet({ groupId: numericGroupId })
+    GroupsService.readGroupEndpointApiV1GroupsGroupIdGet(numericGroupId)
       .then((data) => {
         setGroup(data);
         setGroupName(data.name);
-        setGroupDescription(data.description || '');
+        // setGroupDescription(data.description || ''); // Description cannot be updated
         setError(null);
       })
       .catch((err) => {
@@ -64,14 +64,11 @@ const GroupEditPage: React.FC = () => {
 
     const updatedGroupData: GroupUpdate = {
       name: groupName,
-      description: groupDescription || undefined,
+      // description: groupDescription || undefined, // Description cannot be updated
     };
 
     try {
-      await DefaultService.updateGroupApiV1GroupsGroupIdPut({
-        groupId: numericGroupId,
-        requestBody: updatedGroupData
-      });
+      await GroupsService.updateGroupEndpointApiV1GroupsGroupIdPut(numericGroupId, updatedGroupData);
       navigate(`/groups/${numericGroupId}`); // Redirect to group detail page
     } catch (err: any) {
       console.error("Failed to update group:", err);
@@ -149,6 +146,7 @@ const GroupEditPage: React.FC = () => {
             />
           </div>
 
+          {/* Description field removed as it cannot be updated via the API
           <div>
             <label htmlFor="groupDescription" className="block text-sm font-medium text-gray-700">
               Group Description (Optional)
@@ -162,6 +160,7 @@ const GroupEditPage: React.FC = () => {
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
             />
           </div>
+          */}
 
           {error && ( // Display general form errors or API errors from submission
             <div className="bg-red-50 border-l-4 border-red-400 p-4">

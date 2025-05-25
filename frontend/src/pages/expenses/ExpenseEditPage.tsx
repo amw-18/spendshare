@@ -1,20 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  DefaultService,
+  ExpensesService,
+  GroupsService,
+  UsersService,
   type GroupRead,
   type UserRead,
   type ExpenseRead,
   type ExpenseUpdate,
   type ParticipantUpdate,
 } from '../../generated/api';
-import { useAuthStore } from '../../store/authStore';
 import { ArrowLeftIcon, CheckCircleIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 
 const ExpenseEditPage: React.FC = () => {
   const navigate = useNavigate();
   const { expenseId } = useParams<{ expenseId: string }>();
-  const { user: currentUser } = useAuthStore();
 
   // Form state
   const [description, setDescription] = useState('');
@@ -47,15 +47,14 @@ const ExpenseEditPage: React.FC = () => {
       setLoadingInitialData(true);
       setError(null);
       try {
-        const expensePromise = DefaultService.readExpenseApiV1ExpensesExpenseIdGet({ expenseId: numericExpenseId });
-        const groupsPromise = DefaultService.readGroupsApiV1GroupsGet({});
-        // Fetch all users. If a group is associated, this list can be filtered for participants.
-        const usersPromise = DefaultService.readUsersApiV1UsersGet({});
+        const expensePromise = ExpensesService.readExpenseEndpointApiV1ExpensesExpenseIdGet(numericExpenseId);
+        const groupsPromise = GroupsService.readGroupsEndpointApiV1GroupsGet();
+        const usersPromise = UsersService.readUsersEndpointApiV1UsersGet();
 
         const [expenseData, groupsData, usersData] = await Promise.all([expensePromise, groupsPromise, usersPromise]);
 
         setFetchedExpense(expenseData);
-        setDescription(expenseData.description);
+        setDescription(expenseData.description || ''); // Handle potential null/undefined description
         setAmount(expenseData.amount.toString());
         setSelectedGroupId(expenseData.group_id ?? null);
         setPaidByUserId(expenseData.paid_by_user_id ?? null);
@@ -77,21 +76,11 @@ const ExpenseEditPage: React.FC = () => {
   // Update available participants when group selection changes
   useEffect(() => {
     if (selectedGroupId && fetchedExpense) {
-      // If a group is selected, filter available users to group members
-      // This assumes we need to fetch group members explicitly if not on group object
-      DefaultService.readGroupMembersApiV1GroupsGroupIdMembersGet({ groupId: selectedGroupId })
-        .then(members => setAvailableUsers(members))
-        .catch(err => {
-          console.warn("Could not fetch members for selected group, using all users.", err);
-          // Fallback to all users if member fetching fails
-          DefaultService.readUsersApiV1UsersGet({}).then(setAvailableUsers);
-        });
+      console.warn("Participant filtering by group membership is not fully implemented due to missing dedicated members endpoint. Displaying all users.");
     } else if (fetchedExpense) {
-      // No group selected or fetch error, use all users
-      DefaultService.readUsersApiV1UsersGet({}).then(setAvailableUsers);
+      // No group selected, 'availableUsers' (all users) is already set.
     }
   }, [selectedGroupId, fetchedExpense]);
-
 
   const handleParticipantSelection = (userId: number) => {
     setParticipantUserIds((prev) =>
@@ -121,33 +110,32 @@ const ExpenseEditPage: React.FC = () => {
       return;
     }
 
-    // Ensure payer is included if participants are explicitly set
-    let finalParticipantUpdates: ParticipantUpdate[] = participantUserIds.map(id => ({ user_id: id }));
-    if (participantUserIds.length > 0 && !participantUserIds.includes(paidByUserId)) {
-      finalParticipantUpdates.push({ user_id: paidByUserId });
+    let finalParticipantIds = [...participantUserIds];
+    if (paidByUserId) {
+      if (finalParticipantIds.length > 0 && !finalParticipantIds.includes(paidByUserId)) {
+        finalParticipantIds.push(paidByUserId);
+      } else if (finalParticipantIds.length === 0) {
+        finalParticipantIds = [paidByUserId];
+      }
     }
-    if (participantUserIds.length === 0) { // If no participants selected, payer is the only one
-      finalParticipantUpdates = [{ user_id: paidByUserId }];
-    }
-
+    // If after all logic, finalParticipantIds is empty and paidByUserId is also null, this might be an issue
+    // depending on backend validation (e.g. expense must have at least one participant/payer).
+    // For now, we assume the backend handles it or UI prevents such states.
 
     setLoading(true);
     const numericExpenseId = parseInt(expenseId, 10);
 
-    const expenseUpdateData: ExpenseUpdate = {
-      description: description.trim(),
+    const expenseUpdatePayload: ExpenseUpdate = {
+      description: description || undefined,
       amount: numericAmount,
-      group_id: selectedGroupId ?? undefined,
-      paid_by_user_id: paidByUserId,
-      participants: finalParticipantUpdates, // Send participant user_ids only
+      group_id: selectedGroupId === null ? undefined : selectedGroupId, 
+      paid_by_user_id: paidByUserId === null ? undefined : paidByUserId,
+      participants: finalParticipantIds.map(userId => ({ user_id: userId } as ParticipantUpdate)),
     };
 
     try {
-      await DefaultService.updateExpenseApiV1ExpensesExpenseIdPut({
-        expenseId: numericExpenseId,
-        requestBody: expenseUpdateData
-      });
-      navigate(`/expenses/${numericExpenseId}`); // Redirect to expense detail page
+      await ExpensesService.updateExpenseEndpointApiV1ExpensesExpenseIdPut(numericExpenseId, expenseUpdatePayload);
+      navigate(`/expenses/${numericExpenseId}`);
     } catch (err: any) {
       console.error("Failed to update expense:", err);
       if (err.body && err.body.detail) {
@@ -198,7 +186,6 @@ const ExpenseEditPage: React.FC = () => {
   if (!fetchedExpense) {
     return <div className="container mx-auto p-4 text-center">Original expense data not found.</div>;
   }
-
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -278,8 +265,6 @@ const ExpenseEditPage: React.FC = () => {
               className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
             >
               <option value="" disabled>Select Payer</option>
-              {/* If group selected, filter to group members, else all users.
-                  This logic is simplified here; availableUsers should be updated based on group selection. */}
               {availableUsers.map((user) => (
                 <option key={user.id} value={user.id}>
                   {user.username || user.email}
@@ -287,7 +272,6 @@ const ExpenseEditPage: React.FC = () => {
               ))}
             </select>
           </div>
-
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -305,7 +289,7 @@ const ExpenseEditPage: React.FC = () => {
             />
             <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-md p-2 space-y-1 bg-gray-50">
               {loadingInitialData && availableUsers.length === 0 && <p className="text-sm text-gray-500">Loading participants...</p>}
-              {filteredParticipantPool.filter(p => p.id !== paidByUserId).map((participant) => ( // Exclude payer from selectable list
+              {filteredParticipantPool.filter(p => p.id !== paidByUserId).map((participant) => (
                 <label
                   key={participant.id}
                   className="flex items-center space-x-3 p-2 hover:bg-indigo-50 rounded-md cursor-pointer"

@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager  # For lifespan events in newer FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from src.db.database import create_db_and_tables
 from src.routers import users, groups, expenses
@@ -23,6 +24,15 @@ app = FastAPI(
     description="API for managing expenses, users, and groups.",
     version="0.1.0",
     lifespan=lifespan,  # Use the lifespan context manager
+)
+
+# Set all CORS enabled origins
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Include routers

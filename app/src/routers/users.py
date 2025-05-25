@@ -86,6 +86,16 @@ async def read_users_endpoint(
     return users
 
 
+@router.get("/me", response_model=schemas.UserRead)
+async def read_current_user_me_endpoint(
+    current_user: models.User = Depends(get_current_user),
+) -> models.User:
+    """
+    Get current logged-in user.
+    """
+    return current_user
+
+
 @router.get("/{user_id}", response_model=schemas.UserRead)
 async def read_user_endpoint(
     *,

@@ -41,10 +41,7 @@ const LoginPage: React.FC = () => {
       OpenAPI.TOKEN = token;
 
       // Fetch the current user's details using the token
-      // Since readUserMeApiV1UsersMeGet doesn't exist, we need to use another method
-      // First, let's try to get all users and find the current one
-      const users = await UsersService.readUsersEndpointApiV1UsersGet();
-      const user = users.find(u => u.email === username || u.username === username);
+      const user: UserRead = await UsersService.readCurrentUserMeEndpointApiV1UsersMeGet();
 
       if (!user) {
         throw new Error('Could not retrieve user information');

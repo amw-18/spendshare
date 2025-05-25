@@ -1,14 +1,23 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { DefaultService, type GroupRead, type UserRead, type ExpenseRead } from '../../generated/api';
+import {
+  GroupsService,
+  UsersService,
+  ExpensesService,
+  type GroupRead,
+  type UserRead,
+  type ExpenseRead,
+} from '../../generated/api';
 import { useAuthStore } from '../../store/authStore';
-import { ArrowLeftIcon, PencilIcon, UserPlusIcon, TrashIcon, PlusCircleIcon, ChevronRightIcon, DocumentTextIcon, UserGroupIcon } from '@heroicons/react/24/outline';
-
-// Placeholder for Add Member Modal - to be potentially implemented later
-// const AddMemberModal: React.FC<{ groupId: number; onMemberAdded: () => void; onClose: () => void }> = ({ groupId, onMemberAdded, onClose }) => {
-//   // ... modal implementation ...
-//   return <div>Add Member Modal Placeholder</div>;
-// };
+import {
+  ArrowLeftIcon,
+  PencilIcon,
+  UserPlusIcon,
+  TrashIcon,
+  PlusCircleIcon,
+  ChevronRightIcon,
+  DocumentTextIcon,
+} from '@heroicons/react/24/outline';
 
 const GroupDetailPage: React.FC = () => {
   const { groupId } = useParams<{ groupId: string }>();
@@ -33,10 +42,9 @@ const GroupDetailPage: React.FC = () => {
   const [addMemberLoading, setAddMemberLoading] = useState(false);
   const [addMemberError, setAddMemberError] = useState<string | null>(null);
 
-
   useEffect(() => {
     if (!groupId) {
-      setErrorGroup("Group ID is missing.");
+      setErrorGroup('Group ID is missing.');
       setLoadingGroup(false);
       return;
     }
@@ -48,33 +56,28 @@ const GroupDetailPage: React.FC = () => {
       setLoadingGroup(true);
       setErrorGroup(null);
       try {
-        const fetchedGroup = await DefaultService.readGroupApiV1GroupsGroupIdGet({ groupId: numericGroupId });
+        const fetchedGroup = await GroupsService.readGroupEndpointApiV1GroupsGroupIdGet(numericGroupId);
         setGroup(fetchedGroup);
-        // ASSUMPTION: `fetchedGroup.members` contains an array of UserRead objects.
-        // If not, this needs adjustment. The OpenAPI spec for GroupRead doesn't list `members`.
-        // This is a critical assumption based on the task description.
-        // If `fetchedGroup.members` is undefined, we'll need another way to get members.
-        if (fetchedGroup && (fetchedGroup as any).members) {
-          setMembers((fetchedGroup as any).members);
-        } else {
-          // Fallback: If members are not directly on the group object, try to fetch them.
-          // This endpoint (`read_group_members_api_v1_groups_group_id_members_get`) is assumed to exist.
-          // It's not explicitly in the provided openapi.json snippet, but is a logical requirement.
-          // If this also fails or doesn't exist, member functionality will be limited.
+
+        // Member fetching: GroupRead doesn't include members directly.
+        // Attempt to fetch the creator as an initial member if created_by_user_id exists.
+        setErrorMembers(null); // Clear previous member errors
+        if (fetchedGroup.created_by_user_id) {
           try {
-            const groupMembers = await DefaultService.readGroupMembersApiV1GroupsGroupIdMembersGet({ groupId: numericGroupId });
-            setMembers(groupMembers);
-          } catch (memberErr) {
-            console.warn("Could not fetch group members via dedicated endpoint.", memberErr);
-            setErrorMembers("Member list might be incomplete or unavailable (could not fetch members).");
-            // If group creator is available, add them as a member for now.
-            if (fetchedGroup.created_by_user_id && fetchedGroup.owner) {
-              setMembers([fetchedGroup.owner]);
-            } else {
-              setMembers([]);
-            }
+            const creatorUser = await UsersService.readUserEndpointApiV1UsersUserIdGet(fetchedGroup.created_by_user_id);
+            setMembers([creatorUser]);
+            console.warn("Displaying only group creator as member. Full member list fetching requires a dedicated endpoint or API modification.");
+          } catch (userFetchErr) {
+            console.error("Failed to fetch group creator's details:", userFetchErr);
+            setMembers([]);
+            setErrorMembers("Could not load group creator details. Member list may be incomplete.");
           }
+        } else {
+          setMembers([]);
+          console.warn("Group creator ID not available and no dedicated members endpoint found.");
+          setErrorMembers("Could not load group members. Creator information missing or API endpoint unavailable.");
         }
+
       } catch (err: any) {
         setErrorGroup(err.message || 'Failed to fetch group details.');
       } finally {
@@ -87,7 +90,7 @@ const GroupDetailPage: React.FC = () => {
       setLoadingExpenses(true);
       setErrorExpenses(null);
       try {
-        const fetchedExpenses = await DefaultService.readExpensesApiV1ExpensesGet({ groupId: numericGroupId });
+        const fetchedExpenses = await ExpensesService.readExpensesEndpointApiV1ExpensesGet(undefined, 100, undefined, numericGroupId);
         setExpenses(fetchedExpenses);
       } catch (err: any) {
         setErrorExpenses(err.message || 'Failed to fetch group expenses.');
@@ -103,72 +106,94 @@ const GroupDetailPage: React.FC = () => {
   // Fetch users for "Add Member" search
   useEffect(() => {
     if (showAddMemberInput) {
-      DefaultService.readUsersApiV1UsersGet({}) // Assuming no query needed for initial list
-        .then(setUsersForSearch)
-        .catch(() => setErrorMembers("Could not load users for search."));
+      const fetchAllUsersForSearch = async () => {
+        setAddMemberLoading(true);
+        try {
+          const allUsers = await UsersService.readUsersEndpointApiV1UsersGet(0, 1000);
+          setUsersForSearch(allUsers);
+        } catch (err) {
+          setErrorMembers('Could not load users for search.');
+        } finally {
+          setAddMemberLoading(false);
+        }
+      };
+      fetchAllUsersForSearch();
     }
   }, [showAddMemberInput]);
 
-
   const handleAddMember = async () => {
     if (!groupId || !newMemberEmail.trim()) {
-      setAddMemberError("Please select a user to add.");
+      setAddMemberError('Please select a user to add.');
       return;
     }
-    const selectedUser = usersForSearch.find(u => u.email === newMemberEmail);
+    const numericGroupIdForAdd = parseInt(groupId, 10); // Define numericGroupId here
+    const selectedUser = usersForSearch.find((u) => u.email === newMemberEmail);
     if (!selectedUser) {
-      setAddMemberError("Selected user not found.");
+      setAddMemberError('Selected user not found.');
       return;
     }
 
     setAddMemberLoading(true);
     setAddMemberError(null);
     try {
-      await DefaultService.addGroupMemberApiV1GroupsGroupIdMembersUserIdPost({
-        groupId: parseInt(groupId, 10),
-        userId: selectedUser.id
-      });
-      // Refresh members
-      const groupMembers = await DefaultService.readGroupMembersApiV1GroupsGroupIdMembersGet({ groupId: parseInt(groupId, 10) });
-      setMembers(groupMembers);
+      // Replace DefaultService with GroupsService
+      await GroupsService.addGroupMemberEndpointApiV1GroupsGroupIdMembersUserIdPost(numericGroupIdForAdd, selectedUser.id);
+      // Refresh members - ideally, the response `updatedGroup` would contain the new member list.
+      // For now, re-fetch group details to update members, or optimistically add.
+      setMembers((prevMembers) => [...prevMembers, selectedUser]);
       setNewMemberEmail('');
       setShowAddMemberInput(false);
     } catch (err: any) {
-      setAddMemberError(err.body?.detail || err.message || "Failed to add member.");
+      setAddMemberError(err.body?.detail || err.message || 'Failed to add member.');
     } finally {
       setAddMemberLoading(false);
     }
   };
 
   const handleRemoveMember = async (userIdToRemove: number) => {
-    if (!groupId) return;
-    // Prevent removing self if they are the owner (or implement specific logic for owner transfer)
-    if (userIdToRemove === group?.created_by_user_id && members.length === 1) {
-      alert("Cannot remove the only member, especially if they are the owner. Delete the group instead or add another member first.");
-      return;
-    }
-    if (!window.confirm("Are you sure you want to remove this member?")) return;
+    if (!groupId || !window.confirm('Are you sure you want to remove this member?')) return;
+    const numericGroupId = parseInt(groupId, 10);
 
     try {
-      await DefaultService.removeGroupMemberApiV1GroupsGroupIdMembersUserIdDelete({
-        groupId: parseInt(groupId, 10),
-        userId: userIdToRemove
-      });
-      // Refresh member list
-      const groupMembers = await DefaultService.readGroupMembersApiV1GroupsGroupIdMembersGet({ groupId: parseInt(groupId, 10) });
-      setMembers(groupMembers);
+      await GroupsService.removeGroupMemberEndpointApiV1GroupsGroupIdMembersUserIdDelete(numericGroupId, userIdToRemove);
+      setMembers((prevMembers) => prevMembers.filter((member) => member.id !== userIdToRemove));
     } catch (err: any) {
-      alert(`Failed to remove member: ${err.body?.detail || err.message}`);
+      console.error('Failed to remove member:', err);
+      setErrorMembers(err.body?.detail || err.message || 'Failed to remove member.');
     }
   };
 
+  const handleDeleteGroup = async () => {
+    if (!groupId || !window.confirm('Are you sure you want to delete this group? This will also delete all associated expenses. This action cannot be undone.')) {
+      return;
+    }
+    const numericGroupIdForDelete = parseInt(groupId, 10); // Define numericGroupId here
+    try {
+      // Replace DefaultService with GroupsService
+      await GroupsService.deleteGroupEndpointApiV1GroupsGroupIdDelete(numericGroupIdForDelete);
+      navigate('/groups'); // Redirect to groups list
+    } catch (err: any) {
+      console.error('Failed to delete group:', err);
+    }
+  };
 
   if (loadingGroup) {
-    return <div className="flex justify-center items-center h-64"><div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-500"></div></div>;
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-500"></div>
+      </div>
+    );
   }
 
   if (errorGroup) {
-    return <div className="container mx-auto p-4"><div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert"><strong className="font-bold">Error: </strong><span className="block sm:inline">{errorGroup}</span></div></div>;
+    return (
+      <div className="container mx-auto p-4">
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+          <strong className="font-bold">Error: </strong>
+          <span className="block sm:inline">{errorGroup}</span>
+        </div>
+      </div>
+    );
   }
 
   if (!group) {
@@ -212,7 +237,7 @@ const GroupDetailPage: React.FC = () => {
                   <p className="text-sm text-gray-500">{member.email}</p>
                 </div>
                 {/* Allow removing any member except potentially the current user if they are the only one or owner (add more nuanced logic if needed) */}
-                {currentUser?.id !== member.id && group.created_by_user_id === currentUser?.id && ( // Only owner can remove
+                {currentUser?.id !== member.id && group.created_by_user_id === currentUser?.id && (
                   <button
                     onClick={() => handleRemoveMember(member.id)}
                     className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-full focus:outline-none"
@@ -228,7 +253,7 @@ const GroupDetailPage: React.FC = () => {
           <p className="text-gray-500">No members found or member information is currently unavailable.</p>
         )}
 
-        {group.created_by_user_id === currentUser?.id && ( // Only group owner can add members
+        {group.created_by_user_id === currentUser?.id && (
           <div className="mt-6">
             {!showAddMemberInput ? (
               <button
@@ -249,12 +274,27 @@ const GroupDetailPage: React.FC = () => {
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                 />
                 <datalist id="users-datalist">
-                  {usersForSearch.map(u => <option key={u.id} value={u.email} />)}
+                  {usersForSearch.map((u) => (
+                    <option key={u.id} value={u.email} />
+                  ))}
                 </datalist>
                 {addMemberError && <p className="text-xs text-red-500">{addMemberError}</p>}
                 <div className="flex justify-end space-x-2">
-                  <button onClick={() => { setShowAddMemberInput(false); setAddMemberError(null); setNewMemberEmail(''); }} className="px-3 py-1.5 border border-gray-300 text-sm rounded-md hover:bg-gray-100">Cancel</button>
-                  <button onClick={handleAddMember} disabled={addMemberLoading} className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 disabled:opacity-50">
+                  <button
+                    onClick={() => {
+                      setShowAddMemberInput(false);
+                      setAddMemberError(null);
+                      setNewMemberEmail('');
+                    }}
+                    className="px-3 py-1.5 border border-gray-300 text-sm rounded-md hover:bg-gray-100"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleAddMember}
+                    disabled={addMemberLoading}
+                    className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 disabled:opacity-50"
+                  >
                     {addMemberLoading ? 'Adding...' : 'Confirm Add'}
                   </button>
                 </div>
@@ -296,14 +336,8 @@ const GroupDetailPage: React.FC = () => {
                     <div className="sm:flex">
                       <p className="flex items-center">
                         <UserIcon className="flex-shrink-0 mr-1 h-4 w-4 text-gray-400" />
-                        Paid by: {expense.paid_by_user_id === currentUser?.id ? 'You' : expense.payer?.username || 'N/A'}
+                        Paid by: {expense.paid_by_user_id === currentUser?.id ? 'You' : `User ID: ${expense.paid_by_user_id}`}
                       </p>
-                      {expense.group && (
-                        <p className="mt-1 sm:mt-0 sm:ml-4 flex items-center">
-                          <UserGroupIcon className="flex-shrink-0 mr-1 h-4 w-4 text-gray-400" />
-                          Group: {expense.group.name} {/* Should be current group, but good for consistency */}
-                        </p>
-                      )}
                     </div>
                     <div className="mt-1 sm:mt-0 flex items-center">
                       <p>{new Date(expense.date).toLocaleDateString()}</p>
@@ -316,15 +350,23 @@ const GroupDetailPage: React.FC = () => {
           </ul>
         )}
       </section>
+
+      <button
+        onClick={handleDeleteGroup} // Connect the delete handler
+        className="ml-auto p-2 text-sm text-red-600 hover:text-red-800 bg-red-100 hover:bg-red-200 rounded-md flex items-center focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+      >
+        <TrashIcon className="h-5 w-5 mr-1" />
+        Delete Group
+      </button>
     </div>
   );
 };
+
 // Dummy UserIcon, replace with actual if you have one, or remove if not needed
 const UserIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
   </svg>
 );
-
 
 export default GroupDetailPage;

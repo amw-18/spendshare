@@ -1,4 +1,4 @@
-/* generated using openapi-typescript-codegen -- do not edit */
+/* generated using openapi-typescript-codegen -- do no edit */
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
@@ -7,10 +7,13 @@ import type { Token } from '../models/Token';
 import type { UserCreate } from '../models/UserCreate';
 import type { UserRead } from '../models/UserRead';
 import type { UserUpdate } from '../models/UserUpdate';
+
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
+
 export class UsersService {
+
     /**
      * Create User Endpoint
      * @param requestBody
@@ -30,6 +33,7 @@ export class UsersService {
             },
         });
     }
+
     /**
      * Read Users Endpoint
      * @param skip
@@ -53,6 +57,20 @@ export class UsersService {
             },
         });
     }
+
+    /**
+     * Read Current User Me Endpoint
+     * Get current logged-in user.
+     * @returns UserRead Successful Response
+     * @throws ApiError
+     */
+    public static readCurrentUserMeEndpointApiV1UsersMeGet(): CancelablePromise<UserRead> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/users/me',
+        });
+    }
+
     /**
      * Read User Endpoint
      * @param userId
@@ -73,6 +91,7 @@ export class UsersService {
             },
         });
     }
+
     /**
      * Update User Endpoint
      * @param userId
@@ -97,6 +116,7 @@ export class UsersService {
             },
         });
     }
+
     /**
      * Delete User Endpoint
      * @param userId
@@ -117,6 +137,7 @@ export class UsersService {
             },
         });
     }
+
     /**
      * Login For Access Token
      * @param formData
@@ -136,6 +157,7 @@ export class UsersService {
             },
         });
     }
+
     /**
      * Admin Login As User
      * @param targetUserId
@@ -156,4 +178,5 @@ export class UsersService {
             },
         });
     }
+
 }
