@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.db.database import create_db_and_tables
 from src.routers import users, groups, expenses
-
+from src.config import settings
 
 # Lifespan context manager for startup and shutdown events
 @asynccontextmanager
@@ -20,16 +20,16 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Expense Tracker API",
-    description="API for managing expenses, users, and groups.",
-    version="0.1.0",
+    title=settings.API_TITLE,
+    description=settings.API_DESCRIPTION,
+    version=settings.API_VERSION,
     lifespan=lifespan,  # Use the lifespan context manager
 )
 
 # Set all CORS enabled origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=settings.CORS_ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
