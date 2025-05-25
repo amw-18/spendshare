@@ -26,47 +26,29 @@ const LoginPage: React.FC = () => {
     event.preventDefault();
     setError(null);
 
-    const formData = new URLSearchParams();
-    formData.append('username', username);
-    formData.append('password', password);
-    // Add other required fields like scope if necessary, based on Body_login_for_access_token_api_v1_users_token_post
-    // formData.append('scope', 'some_scope'); // Example if scope is needed
-    // formData.append('client_id', 'some_client_id'); // Example if client_id is needed
-    // formData.append('client_secret', 'some_client_secret'); // Example if client_secret is needed
-
-
     try {
-      // The generated client might expect the body directly as an object
-      // if it handles URLSearchParams conversion internally.
-      // Let's assume it needs URLSearchParams for x-www-form-urlencoded
-      // If the generated client expects a different format, this needs adjustment.
-      // It seems Body_login_for_access_token_api_v1_users_token_post is just an interface
-      // and the actual request object should be passed. The service method should handle the content type.
-      // Re-checking the openapi-typescript-codegen typical output, it usually expects an object.
-
+      // Create the login request body as expected by the API
       const requestBody: Body_login_for_access_token_api_v1_users_token_post = {
         username,
         password,
-        // scope: '', // Default or empty if not explicitly used by your backend for basic login
-        // client_id: '', // if applicable
-        // client_secret: '' // if applicable
       };
 
-      // The tool generated API client for FastAPI typically requires `formData` for `application/x-www-form-urlencoded`
-      // Let's stick to URLSearchParams as per the task description.
-      const loginData = new URLSearchParams();
-      loginData.append('username', username);
-      loginData.append('password', password);
-
-
-      const tokenResponse: Token = await UsersService.loginForAccessTokenApiV1UsersTokenPost(loginData);
+      // Call the login endpoint
+      const tokenResponse: Token = await UsersService.loginForAccessTokenApiV1UsersTokenPost(requestBody);
       const token = tokenResponse.access_token;
 
       // Configure API client to use this token for subsequent requests
-      OpenAPI.TOKEN = token; // Set token for future requests
+      OpenAPI.TOKEN = token;
 
-      // Fetch the current user's details
-      const user: UserRead = await UsersService.readUserMeApiV1UsersMeGet();
+      // Fetch the current user's details using the token
+      // Since readUserMeApiV1UsersMeGet doesn't exist, we need to use another method
+      // First, let's try to get all users and find the current one
+      const users = await UsersService.readUsersEndpointApiV1UsersGet();
+      const user = users.find(u => u.email === username || u.username === username);
+
+      if (!user) {
+        throw new Error('Could not retrieve user information');
+      }
 
       // Store the token and user details
       setToken(token, user);

@@ -1,9 +1,14 @@
 import React from 'react';
-import { Outlet, NavLink, useNavigate, Link } from 'react-router-dom'; // Changed Link to NavLink for main nav items
+import type { ReactNode } from 'react';
+import { NavLink, useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { OpenAPI } from '../generated/api';
 
-const Layout: React.FC = () => {
+interface LayoutProps {
+  children: ReactNode;
+}
+
+const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { token, user, clearToken } = useAuthStore();
   const navigate = useNavigate();
 
@@ -78,7 +83,7 @@ const Layout: React.FC = () => {
         </div>
       </nav>
       <main className="flex-grow container mx-auto p-4 sm:p-6 lg:p-8">
-        <Outlet />
+        {children}
       </main>
       <footer className="bg-white border-t border-gray-200 text-center p-4 mt-auto">
         <p className="text-sm text-gray-500">&copy; {new Date().getFullYear()} SpendShare. All rights reserved.</p>
