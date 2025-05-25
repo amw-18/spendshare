@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { useAuthStore } from '../store/authStore';
 
 // SVGs for icons - directly embedded for simplicity
 const CheckCircleIcon = () => (
@@ -37,6 +38,10 @@ const HowItWorksStep: React.FC<{
 );
 
 const LandingPageContent: React.FC = () => {
+  const { token } = useAuthStore();
+  const isLoggedIn = !!token;
+  const ctaLink = isLoggedIn ? '/dashboard' : '/signup';
+
   return (
     <div className="flex flex-col items-center self-stretch">
       {/* Hero Section */}
@@ -53,7 +58,7 @@ const LandingPageContent: React.FC = () => {
           </p>
           <div className="flex flex-col items-center gap-4 sm:flex-row">
             <Link
-              to="/signup"
+              to={ctaLink}
               className="flex min-w-[160px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-12 px-6 bg-[#7847ea] text-white text-base font-semibold leading-normal tracking-[0.015em] transition-colors hover:bg-[#6c3ddb] focus:ring-2 focus:ring-[#7847ea]/50"
             >
               Get Started for Free
@@ -140,10 +145,10 @@ const LandingPageContent: React.FC = () => {
           </p>
         </div>
         <Link
-          to="/signup"
+          to={ctaLink}
           className="flex min-w-[200px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-12 px-8 bg-[#7847ea] text-white text-lg font-semibold leading-normal tracking-[0.015em] transition-colors hover:bg-[#6c3ddb] focus:ring-2 focus:ring-[#7847ea]/50"
         >
-          Sign Up Now
+          {isLoggedIn ? 'Go to Dashboard' : 'Sign Up Now'}
         </Link>
         <div className="flex items-center gap-3 pt-4">
           <CheckCircleIcon />

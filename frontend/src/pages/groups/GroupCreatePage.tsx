@@ -62,7 +62,7 @@ const GroupCreatePage: React.FC = () => {
 
         <form onSubmit={handleSubmit} className="bg-[#1c162c] shadow-xl rounded-xl p-6 sm:p-8 space-y-6 border border-solid border-[#2f2447]">
           <div>
-            <label htmlFor="groupName" className="block text-sm font-medium text-[#a393c8]">
+            <label htmlFor="groupName" className="block text-sm font-medium text-[#a393c8] mb-1 text-left">
               Group Name <span className="text-red-400">*</span>
             </label>
             <input
@@ -78,7 +78,7 @@ const GroupCreatePage: React.FC = () => {
           </div>
 
           <div>
-            <label htmlFor="groupDescription" className="block text-sm font-medium text-[#a393c8]">
+            <label htmlFor="groupDescription" className="block text-sm font-medium text-[#a393c8] mb-1 text-left">
               Group Description (Optional)
             </label>
             <textarea

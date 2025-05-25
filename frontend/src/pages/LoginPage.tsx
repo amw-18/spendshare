@@ -82,7 +82,7 @@ const LoginPage: React.FC = () => {
           )}
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
-              <label htmlFor="username" className="block text-sm font-medium text-[#a393c8]">
+              <label htmlFor="username" className="block text-sm font-medium text-[#a393c8] mb-1 text-left">
                 Username or Email
               </label>
               <div className="mt-1">
@@ -100,7 +100,7 @@ const LoginPage: React.FC = () => {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-[#a393c8]">
+              <label htmlFor="password" className="block text-sm font-medium text-[#a393c8] mb-1 text-left">
                 Password
               </label>
               <div className="mt-1">

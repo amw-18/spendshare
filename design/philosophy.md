@@ -99,7 +99,20 @@ This document outlines the design philosophy, visual language, and component gui
 
 ### 4.5. Forms & Inputs
 
-*   (To be defined based on application needs, but should follow the overall dark theme, clarity, and modern aesthetic. Tailwind Forms plugin is used, so leverage its capabilities and customize as needed).
+*   **Label Placement & Alignment:** All form labels should be positioned directly above their respective input fields. Labels must be left-aligned.
+*   **Styling:**
+    *   **Labels:** Clear, legible text (e.g., `text-sm font-medium text-[#a393c8]`). Maintain a consistent bottom margin to create adequate spacing from the input field (e.g., `mb-1` or `mb-2`).
+    *   **Input Fields (text, email, password, textarea, etc.):**
+        *   Background: Dark, consistent with the theme (e.g., `bg-[#100c1c]`).
+        *   Border: Subtle border (e.g., `border border-[#2f2447]`).
+        *   Text Color: Light (e.g., `text-white`).
+        *   Placeholder Text: Muted color (e.g., `placeholder-gray-500`).
+        *   Focus State: Clear visual indication, typically by changing the border color to the accent color (e.g., `focus:ring-1 focus:ring-[#7847ea] focus:border-[#7847ea]`).
+        *   Sizing: Full width (`w-full`) within their container, with consistent padding (e.g., `px-3 py-2`) and rounded corners (e.g., `rounded-lg`).
+    *   **Dropdowns/Selects:** Style consistently with other input fields. Custom dropdowns should adhere to the same visual principles.
+*   **Error States:** Clearly indicate errors, typically below the input field or as part of a summary message, using a distinct error color (e.g., `text-red-400`).
+*   **Required Fields:** Indicate required fields clearly, often with an asterisk (`*`) next to the label, styled in an error or accent color.
+*   **Implementation:** Utilize Tailwind CSS utility classes for styling. The `@tailwindcss/forms` plugin can provide a good base, which can then be customized to match this philosophy.
 
 ## 5. Interaction and Animation
 

@@ -210,7 +210,7 @@ const ExpenseCreatePage: React.FC = () => {
 
         <form onSubmit={handleSubmit} className="bg-[#1c162c] shadow-xl rounded-xl p-6 sm:p-8 space-y-6 border border-solid border-[#2f2447]">
           <div>
-            <label htmlFor="description" className="block text-sm font-medium text-[#a393c8]">
+            <label htmlFor="description" className="block text-sm font-medium text-[#a393c8] mb-1 text-left">
               Description <span className="text-red-400">*</span>
             </label>
             <input
@@ -221,12 +221,12 @@ const ExpenseCreatePage: React.FC = () => {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="mt-1 block w-full px-3 py-2 border border-[#2f2447] rounded-lg shadow-sm bg-[#100c1c] text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#7847ea] focus:border-[#7847ea] sm:text-sm"
-              placeholder="e.g., Groceries, Rent, Dinner"
+              placeholder="e.g., Dinner, Groceries, Rent"
             />
           </div>
 
           <div>
-            <label htmlFor="amount" className="block text-sm font-medium text-[#a393c8]">
+            <label htmlFor="amount" className="block text-sm font-medium text-[#a393c8] mb-1 text-left">
               Amount <span className="text-red-400">*</span>
             </label>
             <input
@@ -236,7 +236,7 @@ const ExpenseCreatePage: React.FC = () => {
               required
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 border border-[#2f2447] rounded-lg shadow-sm bg-[#100c1c] text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#7847ea] focus:border-[#7847ea] sm:text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              className="mt-1 block w-full px-3 py-2 border border-[#2f2447] rounded-lg shadow-sm bg-[#100c1c] text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#7847ea] focus:border-[#7847ea] sm:text-sm appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               placeholder="0.00"
               step="0.01"
               min="0.01"
@@ -244,32 +244,37 @@ const ExpenseCreatePage: React.FC = () => {
           </div>
 
           <div>
-            <label htmlFor="group" className="block text-sm font-medium text-[#a393c8]">
+            <label htmlFor="groupId" className="block text-sm font-medium text-[#a393c8] mb-1 text-left">
               Group (Optional)
             </label>
-            <CustomDropdown
-              id="group"
-              options={userGroups.map(group => ({ value: group.id, label: group.name }))}
-              value={selectedGroupId}
-              onChange={(value) => setSelectedGroupId(value as number | null)}
-              placeholder="No Group (Personal Expense)"
-            />
+            <div className="mt-1">
+              <CustomDropdown
+                id="groupId"
+                options={userGroups.map(group => ({ value: group.id, label: group.name }))}
+                value={selectedGroupId}
+                onChange={(value) => setSelectedGroupId(value as number | null)}
+                placeholder="Select a group..."
+              />
+            </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[#a393c8] mb-1">
-              Participants
+            <label htmlFor="participantSearch" className="block text-sm font-medium text-[#a393c8] mb-1 text-left">
+              Search Participants <span className="text-red-400">*</span>
             </label>
-            <p className="text-xs text-gray-400 mb-2">
-              {selectedGroupId ? "Select from group members." : "Select from all users."} You (payer) will be automatically included.
-            </p>
-            <input
-              type="text"
-              placeholder="Search participants by name or email..."
-              value={participantSearchTerm}
-              onChange={(e) => setParticipantSearchTerm(e.target.value)}
-              className="mb-3 block w-full px-3 py-2 border border-[#2f2447] rounded-lg shadow-sm bg-[#100c1c] text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#7847ea] focus:border-[#7847ea] sm:text-sm"
-            />
+            <div className="mt-1">
+              <input
+                id="participant-search"
+                type="text"
+                placeholder={`Search from ${availableParticipants.length} users...`}
+                value={participantSearchTerm}
+                onChange={(e) => setParticipantSearchTerm(e.target.value)}
+                className="block w-full px-3 py-2 border border-[#2f2447] rounded-lg shadow-sm bg-[#100c1c] text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#7847ea] focus:border-[#7847ea] sm:text-sm"
+              />
+            </div>
+          </div>
+
+          <div>
             {loadingInitialData && availableParticipants.length === 0 && <p className="text-sm text-gray-400">Loading participants...</p>}
             <div className="max-h-60 overflow-y-auto border border-[#2f2447] rounded-lg p-2 space-y-1 bg-[#100c1c]">
               {filteredParticipants.length > 0 ? filteredParticipants.map((participant) => (

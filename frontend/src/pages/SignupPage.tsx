@@ -47,7 +47,7 @@ const SignupPage: React.FC = () => {
         <div className="bg-[#1c162c] py-8 px-4 shadow-xl sm:rounded-xl sm:px-10 border border-solid border-[#2f2447]">
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-[#a393c8]">
+              <label htmlFor="email" className="block text-sm font-medium text-[#a393c8] mb-1 text-left">
                 Email address
               </label>
               <div className="mt-1">
@@ -65,7 +65,7 @@ const SignupPage: React.FC = () => {
             </div>
 
             <div>
-              <label htmlFor="username" className="block text-sm font-medium text-[#a393c8]">
+              <label htmlFor="username" className="block text-sm font-medium text-[#a393c8] mb-1 text-left">
                 Username
               </label>
               <div className="mt-1">
@@ -83,7 +83,7 @@ const SignupPage: React.FC = () => {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-[#a393c8]">
+              <label htmlFor="password" className="block text-sm font-medium text-[#a393c8] mb-1 text-left">
                 Password
               </label>
               <div className="mt-1">
