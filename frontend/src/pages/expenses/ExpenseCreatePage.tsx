@@ -11,6 +11,7 @@ import {
 } from '../../generated/api';
 import { useAuthStore } from '../../store/authStore';
 import { ArrowLeftIcon, CheckCircleIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import CustomDropdown from '../../components/CustomDropdown';
 
 const ExpenseCreatePage: React.FC = () => {
   const navigate = useNavigate();
@@ -54,7 +55,6 @@ const ExpenseCreatePage: React.FC = () => {
           setSelectedGroupId(numGroupId);
           // NOTE: Cannot fetch specific group members with current API client.
           // Participant list will remain all users. User can manually select.
-          // If current user exists, pre-select all *other* users by default.
           if (currentUser) {
             setParticipantUserIds(usersResponse.filter((u: UserRead) => u.id !== currentUser.id).map((u: UserRead) => u.id));
           } else {
@@ -70,6 +70,8 @@ const ExpenseCreatePage: React.FC = () => {
       } catch (err: any) {
         console.error("Failed to fetch initial data:", err);
         setError("Failed to load necessary data. Please try refreshing.");
+        setUserGroups([]); // Ensure groups is empty on error
+        setAvailableParticipants([]); // Ensure participants is empty on error
       } finally {
         setLoadingInitialData(false);
       }
@@ -187,29 +189,29 @@ const ExpenseCreatePage: React.FC = () => {
 
   if (loadingInitialData && !userGroups.length && !availableParticipants.length) { // Only show full page loader on very first load
     return (
-      <div className="flex justify-center items-center h-screen">
-        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-500"></div>
+      <div className="flex justify-center items-center h-screen bg-[#161122]">
+        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-[#7847ea]"></div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto p-4 sm:p-6 lg:p-8">
+    <div className="container mx-auto p-4 sm:p-6 lg:p-8 bg-[#161122] min-h-screen text-white">
       <div className="max-w-2xl mx-auto">
         <button
           onClick={() => navigate(selectedGroupId ? `/groups/${selectedGroupId}` : '/dashboard')}
-          className="mb-6 inline-flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-500"
+          className="mb-6 inline-flex items-center text-sm font-medium text-[#7847ea] hover:text-[#a393c8] transition-colors duration-150"
         >
           <ArrowLeftIcon className="h-5 w-5 mr-1" />
           {selectedGroupId ? 'Back to Group' : 'Back to Dashboard'}
         </button>
 
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-8">Create New Expense</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-white mb-8">Create New Expense</h1>
 
-        <form onSubmit={handleSubmit} className="bg-white shadow-xl rounded-lg p-6 sm:p-8 space-y-6">
+        <form onSubmit={handleSubmit} className="bg-[#1c162c] shadow-xl rounded-xl p-6 sm:p-8 space-y-6 border border-solid border-[#2f2447]">
           <div>
-            <label htmlFor="description" className="block text-sm font-medium text-gray-700">
-              Description <span className="text-red-500">*</span>
+            <label htmlFor="description" className="block text-sm font-medium text-[#a393c8]">
+              Description <span className="text-red-400">*</span>
             </label>
             <input
               type="text"
@@ -218,14 +220,14 @@ const ExpenseCreatePage: React.FC = () => {
               required
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+              className="mt-1 block w-full px-3 py-2 border border-[#2f2447] rounded-lg shadow-sm bg-[#100c1c] text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#7847ea] focus:border-[#7847ea] sm:text-sm"
               placeholder="e.g., Groceries, Rent, Dinner"
             />
           </div>
 
           <div>
-            <label htmlFor="amount" className="block text-sm font-medium text-gray-700">
-              Amount <span className="text-red-500">*</span>
+            <label htmlFor="amount" className="block text-sm font-medium text-[#a393c8]">
+              Amount <span className="text-red-400">*</span>
             </label>
             <input
               type="number"
@@ -234,7 +236,7 @@ const ExpenseCreatePage: React.FC = () => {
               required
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+              className="mt-1 block w-full px-3 py-2 border border-[#2f2447] rounded-lg shadow-sm bg-[#100c1c] text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#7847ea] focus:border-[#7847ea] sm:text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               placeholder="0.00"
               step="0.01"
               min="0.01"
@@ -242,30 +244,23 @@ const ExpenseCreatePage: React.FC = () => {
           </div>
 
           <div>
-            <label htmlFor="group" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="group" className="block text-sm font-medium text-[#a393c8]">
               Group (Optional)
             </label>
-            <select
+            <CustomDropdown
               id="group"
-              name="group"
-              value={selectedGroupId ?? ''}
-              onChange={(e) => setSelectedGroupId(e.target.value ? parseInt(e.target.value) : null)}
-              className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
-            >
-              <option value="">No Group (Personal Expense)</option>
-              {userGroups.map((group) => (
-                <option key={group.id} value={group.id}>
-                  {group.name}
-                </option>
-              ))}
-            </select>
+              options={userGroups.map(group => ({ value: group.id, label: group.name }))}
+              value={selectedGroupId}
+              onChange={(value) => setSelectedGroupId(value as number | null)}
+              placeholder="No Group (Personal Expense)"
+            />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-[#a393c8] mb-1">
               Participants
             </label>
-            <p className="text-xs text-gray-500 mb-2">
+            <p className="text-xs text-gray-400 mb-2">
               {selectedGroupId ? "Select from group members." : "Select from all users."} You (payer) will be automatically included.
             </p>
             <input
@@ -273,55 +268,54 @@ const ExpenseCreatePage: React.FC = () => {
               placeholder="Search participants by name or email..."
               value={participantSearchTerm}
               onChange={(e) => setParticipantSearchTerm(e.target.value)}
-              className="mb-3 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+              className="mb-3 block w-full px-3 py-2 border border-[#2f2447] rounded-lg shadow-sm bg-[#100c1c] text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#7847ea] focus:border-[#7847ea] sm:text-sm"
             />
-            {loadingInitialData && availableParticipants.length === 0 && <p className="text-sm text-gray-500">Loading participants...</p>}
-            <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-md p-2 space-y-1 bg-gray-50">
+            {loadingInitialData && availableParticipants.length === 0 && <p className="text-sm text-gray-400">Loading participants...</p>}
+            <div className="max-h-60 overflow-y-auto border border-[#2f2447] rounded-lg p-2 space-y-1 bg-[#100c1c]">
               {filteredParticipants.length > 0 ? filteredParticipants.map((participant) => (
-                // Exclude current user from selectable list as they are the payer and auto-included
                 participant.id !== currentUser?.id && (
                   <label
                     key={participant.id}
-                    className="flex items-center space-x-3 p-2 hover:bg-indigo-50 rounded-md cursor-pointer"
+                    className="flex items-center space-x-3 p-2 hover:bg-[#2f2447]/60 rounded-md cursor-pointer transition-colors duration-150"
                   >
                     <input
                       type="checkbox"
                       checked={participantUserIds.includes(participant.id)}
                       onChange={() => handleParticipantSelection(participant.id)}
-                      className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                      className="h-4 w-4 text-[#7847ea] border-gray-600 rounded focus:ring-[#7847ea] bg-[#100c1c] focus:ring-offset-0 focus:ring-1 cursor-pointer"
                     />
-                    <span className="text-sm text-gray-700">{participant.username || participant.email}</span>
+                    <span className="text-sm text-gray-300">{participant.username || participant.email}</span>
                   </label>
                 )
-              )) : <p className="text-sm text-gray-500 p-2">No matching participants found.</p>}
+              )) : <p className="text-sm text-gray-400 p-2">No matching participants found.</p>}
             </div>
           </div>
 
           {error && (
-            <div className="bg-red-50 border-l-4 border-red-400 p-4">
+            <div className="bg-red-900/30 border-l-4 border-red-700/50 p-4 rounded-md">
               <div className="flex">
                 <div className="flex-shrink-0">
                   <ExclamationTriangleIcon className="h-5 w-5 text-red-400" aria-hidden="true" />
                 </div>
                 <div className="ml-3">
-                  <p className="text-sm text-red-700">{error}</p>
+                  <p className="text-sm text-red-300">{error}</p>
                 </div>
               </div>
             </div>
           )}
 
-          <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+          <div className="flex justify-end space-x-3 pt-4 border-t border-[#2f2447]">
             <button
               type="button"
               onClick={() => navigate(selectedGroupId ? `/groups/${selectedGroupId}` : '/expenses')}
-              className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              className="px-4 py-2 border border-[#2f2447] rounded-lg shadow-sm text-sm font-medium text-[#a393c8] bg-transparent hover:bg-[#2f2447]/40 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#1c162c] focus:ring-[#7847ea] h-10 items-center transition-colors duration-150"
               disabled={loading}
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+              className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-[#7847ea] hover:bg-[#6c3ddb] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#1c162c] focus:ring-[#7847ea] h-10 disabled:opacity-60 transition-colors duration-150"
               disabled={loading || loadingInitialData}
             >
               {loading ? (

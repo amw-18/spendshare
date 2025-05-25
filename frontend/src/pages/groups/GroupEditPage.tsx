@@ -88,22 +88,22 @@ const GroupEditPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-500"></div>
+      <div className="flex justify-center items-center h-screen bg-[#161122]">
+        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-[#7847ea]"></div>
       </div>
     );
   }
 
   if (error && !group) { // If initial fetch failed and we don't have group data to show form
     return (
-      <div className="container mx-auto p-4">
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+      <div className="container mx-auto p-4 bg-[#161122] min-h-screen">
+        <div className="bg-red-900/30 border border-red-700/50 text-red-400 px-4 py-3 rounded-lg relative mb-4" role="alert">
           <strong className="font-bold">Error: </strong>
           <span className="block sm:inline">{error}</span>
         </div>
         <button
           onClick={() => navigate(groupId ? `/groups/${groupId}` : '/groups')}
-          className="inline-flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-500"
+          className="inline-flex items-center text-sm font-medium text-[#7847ea] hover:text-[#a393c8] transition-colors duration-150"
         >
           <ArrowLeftIcon className="h-5 w-5 mr-1" />
           {groupId ? 'Back to Group Details' : 'Back to Groups'}
@@ -113,7 +113,7 @@ const GroupEditPage: React.FC = () => {
   }
 
   if (!group) { // Should be covered by loading or error state if fetch fails
-    return <div className="container mx-auto p-4 text-center">Group data not available.</div>;
+    return <div className="container mx-auto p-4 text-center text-[#a393c8] bg-[#161122] min-h-screen">Group data not available.</div>;
   }
 
 
@@ -122,18 +122,18 @@ const GroupEditPage: React.FC = () => {
       <div className="max-w-2xl mx-auto">
         <button
           onClick={() => navigate(`/groups/${groupId}`)}
-          className="mb-6 inline-flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-500"
+          className="mb-6 inline-flex items-center text-sm font-medium text-[#7847ea] hover:text-[#a393c8] transition-colors duration-150"
         >
           <ArrowLeftIcon className="h-5 w-5 mr-1" />
           Back to Group Details
         </button>
 
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-6">Edit Group</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-white mb-6">Edit Group</h1>
 
-        <form onSubmit={handleSubmit} className="bg-white shadow-md rounded-lg p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="bg-[#1c162c] shadow-xl rounded-xl p-6 sm:p-8 space-y-6 border border-solid border-[#2f2447]">
           <div>
-            <label htmlFor="groupName" className="block text-sm font-medium text-gray-700">
-              Group Name <span className="text-red-500">*</span>
+            <label htmlFor="groupName" className="block text-sm font-medium text-[#a393c8]">
+              Group Name <span className="text-red-400">*</span>
             </label>
             <input
               type="text"
@@ -142,7 +142,7 @@ const GroupEditPage: React.FC = () => {
               required
               value={groupName}
               onChange={(e) => setGroupName(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+              className="mt-1 block w-full px-3 py-2 border border-[#2f2447] rounded-lg shadow-sm bg-[#100c1c] text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#7847ea] focus:border-[#7847ea] sm:text-sm"
             />
           </div>
 
@@ -163,7 +163,7 @@ const GroupEditPage: React.FC = () => {
           */}
 
           {error && ( // Display general form errors or API errors from submission
-            <div className="bg-red-50 border-l-4 border-red-400 p-4">
+            <div className="bg-red-900/30 border-l-4 border-red-700/50 p-4 rounded-md">
               <div className="flex">
                 <div className="flex-shrink-0">
                   <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -171,24 +171,24 @@ const GroupEditPage: React.FC = () => {
                   </svg>
                 </div>
                 <div className="ml-3">
-                  <p className="text-sm text-red-700">{error}</p>
+                  <p className="text-sm text-red-300">{error}</p>
                 </div>
               </div>
             </div>
           )}
 
-          <div className="flex justify-end space-x-3">
+          <div className="flex justify-end space-x-3 pt-2">
             <button
               type="button"
               onClick={() => navigate(`/groups/${groupId}`)}
-              className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              className="px-4 py-2 border border-[#2f2447] rounded-lg shadow-sm text-sm font-medium text-[#a393c8] bg-transparent hover:bg-[#2f2447]/40 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#1c162c] focus:ring-[#7847ea] h-10 items-center transition-colors duration-150"
               disabled={submitting}
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+              className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-[#7847ea] hover:bg-[#6c3ddb] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#1c162c] focus:ring-[#7847ea] h-10 items-center disabled:opacity-60 transition-colors duration-150"
               disabled={submitting || loading} // Disable if initial load is still somehow happening or submitting
             >
               {submitting ? 'Saving Changes...' : 'Save Changes'}

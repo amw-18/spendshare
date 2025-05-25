@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'; // Added useLocatio
 import { UsersService, OpenAPI } from '../generated/api';
 import { type Body_login_for_access_token_api_v1_users_token_post, type Token, type UserRead } from '../generated/api'; // Assuming Token and UserRead are relevant
 import { useAuthStore } from '../store/authStore';
+import { Link } from 'react-router-dom';
 
 const LoginPage: React.FC = () => {
   const [username, setUsername] = useState('');
@@ -63,23 +64,25 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    // Layout's <main> handles centering for auth pages.
+    // This outer div is a simple wrapper.
+    <div>
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+        <h2 className="mt-6 text-center text-2xl sm:text-3xl font-bold text-white">
           Sign in to your account
         </h2>
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+        <div className="bg-[#1c162c] py-8 px-4 shadow-xl sm:rounded-xl sm:px-10 border border-solid border-[#2f2447]">
           {successMessage && (
-            <div className="mb-4 p-3 rounded-md bg-green-100 text-green-700">
+            <div className="mb-4 p-3 rounded-lg bg-green-900/30 text-green-300 border border-green-700/50">
               {successMessage}
             </div>
           )}
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
-              <label htmlFor="username" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="username" className="block text-sm font-medium text-[#a393c8]">
                 Username or Email
               </label>
               <div className="mt-1">
@@ -91,13 +94,13 @@ const LoginPage: React.FC = () => {
                   required
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                  className="appearance-none block w-full px-3 py-2 border border-[#2f2447] rounded-lg shadow-sm bg-[#100c1c] text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#7847ea] focus:border-[#7847ea] sm:text-sm"
                 />
               </div>
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="password" className="block text-sm font-medium text-[#a393c8]">
                 Password
               </label>
               <div className="mt-1">
@@ -109,26 +112,34 @@ const LoginPage: React.FC = () => {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                  className="appearance-none block w-full px-3 py-2 border border-[#2f2447] rounded-lg shadow-sm bg-[#100c1c] text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#7847ea] focus:border-[#7847ea] sm:text-sm"
                 />
               </div>
             </div>
 
             {error && (
               <div>
-                <p className="text-sm text-red-600 bg-red-100 p-3 rounded-md">{error}</p>
+                <p className="text-sm text-red-400 bg-red-900/30 p-3 rounded-lg border border-red-700/50">{error}</p>
               </div>
             )}
 
             <div>
               <button
                 type="submit"
-                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-[#7847ea] hover:bg-[#6c3ddb] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#1c162c] focus:ring-[#7847ea] h-10 items-center"
               >
                 Sign in
               </button>
             </div>
           </form>
+          
+          <p className="mt-6 text-center text-sm text-[#a393c8]">
+            Don't have an account?{' '}
+            <Link to="/signup" className="font-medium text-[#7847ea] hover:text-[#a393c8]">
+              Sign up
+            </Link>
+          </p>
+
         </div>
       </div>
     </div>

@@ -128,8 +128,8 @@ const ExpenseEditPage: React.FC = () => {
     const expenseUpdatePayload: ExpenseUpdate = {
       description: description || undefined,
       amount: numericAmount,
-      group_id: selectedGroupId === null ? undefined : selectedGroupId, 
-      paid_by_user_id: paidByUserId === null ? undefined : paidByUserId,
+      group_id: selectedGroupId ?? undefined, 
+      paid_by_user_id: paidByUserId ?? undefined,
       participants: finalParticipantIds.map(userId => ({ user_id: userId } as ParticipantUpdate)),
     };
 
@@ -159,22 +159,22 @@ const ExpenseEditPage: React.FC = () => {
 
   if (loadingInitialData) {
     return (
-      <div className="flex justify-center items-center h-screen">
-        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-500"></div>
+      <div className="flex justify-center items-center h-screen bg-[#161122]">
+        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-[#7847ea]"></div>
       </div>
     );
   }
 
   if (error && !fetchedExpense) { // If initial fetch failed
     return (
-      <div className="container mx-auto p-4">
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+      <div className="container mx-auto p-4 bg-[#161122] min-h-screen">
+        <div className="bg-red-900/30 border border-red-700/50 text-red-400 px-4 py-3 rounded-lg relative mb-4" role="alert">
           <strong className="font-bold">Error: </strong>
           <span className="block sm:inline">{error}</span>
         </div>
         <button
           onClick={() => navigate(expenseId ? `/expenses/${expenseId}` : '/expenses')}
-          className="inline-flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-500"
+          className="inline-flex items-center text-sm font-medium text-[#7847ea] hover:text-[#a393c8] transition-colors duration-150"
         >
           <ArrowLeftIcon className="h-5 w-5 mr-1" />
           {expenseId ? 'Back to Expense Details' : 'Back to Expenses'}
@@ -184,26 +184,26 @@ const ExpenseEditPage: React.FC = () => {
   }
 
   if (!fetchedExpense) {
-    return <div className="container mx-auto p-4 text-center">Original expense data not found.</div>;
+    return <div className="container mx-auto p-4 text-center text-[#a393c8] bg-[#161122] min-h-screen">Original expense data not found.</div>;
   }
 
   return (
-    <div className="container mx-auto p-4 sm:p-6 lg:p-8">
+    <div className="container mx-auto p-4 sm:p-6 lg:p-8 bg-[#161122] min-h-screen text-white">
       <div className="max-w-2xl mx-auto">
         <button
           onClick={() => navigate(`/expenses/${expenseId}`)}
-          className="mb-6 inline-flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-500"
+          className="mb-6 inline-flex items-center text-sm font-medium text-[#7847ea] hover:text-[#a393c8] transition-colors duration-150"
         >
           <ArrowLeftIcon className="h-5 w-5 mr-1" />
           Back to Expense Details
         </button>
 
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-8">Edit Expense</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-white mb-8">Edit Expense</h1>
 
-        <form onSubmit={handleSubmit} className="bg-white shadow-xl rounded-lg p-6 sm:p-8 space-y-6">
+        <form onSubmit={handleSubmit} className="bg-[#1c162c] shadow-xl rounded-xl p-6 sm:p-8 space-y-6 border border-solid border-[#2f2447]">
           <div>
-            <label htmlFor="description" className="block text-sm font-medium text-gray-700">
-              Description <span className="text-red-500">*</span>
+            <label htmlFor="description" className="block text-sm font-medium text-[#a393c8]">
+              Description <span className="text-red-400">*</span>
             </label>
             <input
               type="text"
@@ -212,13 +212,13 @@ const ExpenseEditPage: React.FC = () => {
               required
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+              className="mt-1 block w-full px-3 py-2 border border-[#2f2447] rounded-lg shadow-sm focus:outline-none focus:ring-[#7847ea] focus:border-[#7847ea] sm:text-sm bg-[#100c1c] text-white placeholder-gray-500"
             />
           </div>
 
           <div>
-            <label htmlFor="amount" className="block text-sm font-medium text-gray-700">
-              Amount <span className="text-red-500">*</span>
+            <label htmlFor="amount" className="block text-sm font-medium text-[#a393c8]">
+              Amount <span className="text-red-400">*</span>
             </label>
             <input
               type="number"
@@ -227,14 +227,14 @@ const ExpenseEditPage: React.FC = () => {
               required
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+              className="mt-1 block w-full px-3 py-2 border border-[#2f2447] rounded-lg shadow-sm focus:outline-none focus:ring-[#7847ea] focus:border-[#7847ea] sm:text-sm bg-[#100c1c] text-white placeholder-gray-500"
               step="0.01"
               min="0.01"
             />
           </div>
 
           <div>
-            <label htmlFor="group" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="group" className="block text-sm font-medium text-[#a393c8]">
               Group (Optional)
             </label>
             <select
@@ -242,11 +242,11 @@ const ExpenseEditPage: React.FC = () => {
               name="group"
               value={selectedGroupId ?? ''}
               onChange={(e) => setSelectedGroupId(e.target.value ? parseInt(e.target.value) : null)}
-              className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+              className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-[#2f2447] focus:outline-none focus:ring-[#7847ea] focus:border-[#7847ea] sm:text-sm rounded-lg bg-[#100c1c] text-white"
             >
-              <option value="">No Group (Personal Expense)</option>
+              <option value="" className="bg-[#1c162c] text-gray-400">No Group (Personal Expense)</option>
               {userGroups.map((group) => (
-                <option key={group.id} value={group.id}>
+                <option key={group.id} value={group.id} className="bg-[#1c162c] text-white">
                   {group.name}
                 </option>
               ))}
@@ -254,19 +254,19 @@ const ExpenseEditPage: React.FC = () => {
           </div>
 
           <div>
-            <label htmlFor="paidBy" className="block text-sm font-medium text-gray-700">
-              Paid by <span className="text-red-500">*</span>
+            <label htmlFor="paidBy" className="block text-sm font-medium text-[#a393c8]">
+              Paid by <span className="text-red-400">*</span>
             </label>
             <select
               id="paidBy"
               name="paidBy"
               value={paidByUserId ?? ''}
               onChange={(e) => setPaidByUserId(e.target.value ? parseInt(e.target.value) : null)}
-              className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+              className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-[#2f2447] focus:outline-none focus:ring-[#7847ea] focus:border-[#7847ea] sm:text-sm rounded-lg bg-[#100c1c] text-white"
             >
-              <option value="" disabled>Select Payer</option>
+              <option value="" disabled className="bg-[#1c162c] text-gray-400">Select Payer</option>
               {availableUsers.map((user) => (
-                <option key={user.id} value={user.id}>
+                <option key={user.id} value={user.id} className="bg-[#1c162c] text-white">
                   {user.username || user.email}
                 </option>
               ))}
@@ -274,33 +274,33 @@ const ExpenseEditPage: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-[#a393c8] mb-1">
               Participants
             </label>
-            <p className="text-xs text-gray-500 mb-2">
-              Select users involved in this expense. The payer will be automatically included.
+            <p className="text-xs text-gray-400 mb-2">
+              Select users involved in this expense. The payer will be automatically included if not selected.
             </p>
             <input
               type="text"
               placeholder="Search participants..."
               value={participantSearchTerm}
               onChange={(e) => setParticipantSearchTerm(e.target.value)}
-              className="mb-3 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+              className="mb-3 block w-full px-3 py-2 border border-[#2f2447] rounded-lg shadow-sm focus:outline-none focus:ring-[#7847ea] focus:border-[#7847ea] sm:text-sm bg-[#100c1c] text-white placeholder-gray-500"
             />
-            <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-md p-2 space-y-1 bg-gray-50">
+            <div className="max-h-60 overflow-y-auto border border-[#2f2447] rounded-lg p-2 space-y-1 bg-[#100c1c]">
               {loadingInitialData && availableUsers.length === 0 && <p className="text-sm text-gray-500">Loading participants...</p>}
               {filteredParticipantPool.filter(p => p.id !== paidByUserId).map((participant) => (
                 <label
                   key={participant.id}
-                  className="flex items-center space-x-3 p-2 hover:bg-indigo-50 rounded-md cursor-pointer"
+                  className="flex items-center space-x-3 p-2 hover:bg-[#2f2447]/50 rounded-lg cursor-pointer transition-colors duration-150"
                 >
                   <input
                     type="checkbox"
                     checked={participantUserIds.includes(participant.id)}
                     onChange={() => handleParticipantSelection(participant.id)}
-                    className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                    className="h-4 w-4 text-[#7847ea] border-gray-600 rounded focus:ring-[#7847ea] bg-transparent focus:ring-offset-0"
                   />
-                  <span className="text-sm text-gray-700">{participant.username || participant.email}</span>
+                  <span className="text-sm text-gray-300">{participant.username || participant.email}</span>
                 </label>
               ))}
               {filteredParticipantPool.length === 0 && !loadingInitialData && <p className="text-sm text-gray-500 p-2">No matching participants found.</p>}
@@ -308,30 +308,30 @@ const ExpenseEditPage: React.FC = () => {
           </div>
 
           {error && (
-            <div className="bg-red-50 border-l-4 border-red-400 p-4">
+            <div className="bg-red-900/30 border-l-4 border-red-700/50 p-4 rounded-md">
               <div className="flex">
                 <div className="flex-shrink-0">
                   <ExclamationTriangleIcon className="h-5 w-5 text-red-400" aria-hidden="true" />
                 </div>
                 <div className="ml-3">
-                  <p className="text-sm text-red-700">{error}</p>
+                  <p className="text-sm text-red-400">{error}</p>
                 </div>
               </div>
             </div>
           )}
 
-          <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+          <div className="flex justify-end space-x-3 pt-4 border-t border-[#2f2447]">
             <button
               type="button"
               onClick={() => navigate(`/expenses/${expenseId}`)}
-              className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              className="px-4 py-2 border border-[#2f2447] rounded-lg shadow-sm text-sm font-medium text-[#a393c8] bg-transparent hover:bg-[#2f2447]/40 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#1c162c] focus:ring-[#7847ea] h-10 transition-colors duration-150 disabled:opacity-60"
               disabled={loading}
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+              className="inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-[#7847ea] hover:bg-[#5f37b3] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#1c162c] focus:ring-[#7847ea] h-10 disabled:opacity-60 transition-colors duration-150"
               disabled={loading || loadingInitialData}
             >
               {loading ? (

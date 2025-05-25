@@ -179,16 +179,16 @@ const GroupDetailPage: React.FC = () => {
 
   if (loadingGroup) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-500"></div>
+      <div className="flex justify-center items-center h-screen bg-[#161122]">
+        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-[#7847ea]"></div>
       </div>
     );
   }
 
   if (errorGroup) {
     return (
-      <div className="container mx-auto p-4">
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+      <div className="container mx-auto p-4 bg-[#161122] min-h-screen">
+        <div className="bg-red-900/30 border border-red-700/50 text-red-400 px-4 py-3 rounded-lg relative" role="alert">
           <strong className="font-bold">Error: </strong>
           <span className="block sm:inline">{errorGroup}</span>
         </div>
@@ -197,50 +197,49 @@ const GroupDetailPage: React.FC = () => {
   }
 
   if (!group) {
-    return <div className="container mx-auto p-4 text-center">Group not found.</div>;
+    return <div className="container mx-auto p-4 text-center text-[#a393c8] bg-[#161122] min-h-screen">Group not found.</div>;
   }
 
   return (
-    <div className="container mx-auto p-4 sm:p-6 lg:p-8 space-y-8">
+    <div className="container mx-auto p-4 sm:p-6 lg:p-8 space-y-8 text-[#e0def4]">
       {/* Header and Back Button */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
         <div>
           <button
             onClick={() => navigate('/groups')}
-            className="inline-flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-500 mb-2 sm:mb-0"
+            className="inline-flex items-center text-sm font-medium text-[#7847ea] hover:text-[#a393c8] mb-2 sm:mb-0 transition-colors duration-150"
           >
             <ArrowLeftIcon className="h-5 w-5 mr-1" />
             Back to Groups
           </button>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">{group.name}</h1>
-          {group.description && <p className="mt-1 text-md text-gray-600">{group.description}</p>}
+          <h1 className="text-2xl sm:text-3xl font-bold text-white">{group.name}</h1>
+          {group.description && <p className="mt-1 text-md text-[#a393c8]">{group.description}</p>}
         </div>
         <Link
           to={`/groups/${groupId}/edit`}
-          className="mt-3 sm:mt-0 inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          className="mt-3 sm:mt-0 inline-flex items-center px-4 py-2 border border-[#2f2447] shadow-sm text-sm font-medium rounded-lg text-[#a393c8] bg-transparent hover:bg-[#2f2447]/40 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#161122] focus:ring-[#7847ea] h-10 transition-colors duration-150"
         >
-          <PencilIcon className="h-5 w-5 mr-2 text-gray-500" />
+          <PencilIcon className="h-5 w-5 mr-2 text-[#6b5b91]" />
           Edit Group
         </Link>
       </div>
 
       {/* Members Section */}
-      <section className="bg-white shadow-md rounded-lg p-6">
-        <h2 className="text-xl font-semibold text-gray-700 mb-4">Group Members</h2>
-        {errorMembers && <p className="text-sm text-red-500 bg-red-100 p-2 rounded-md mb-3">{errorMembers}</p>}
+      <section className="bg-[#1c162c] shadow-xl rounded-xl p-6 border border-solid border-[#2f2447]">
+        <h2 className="text-xl font-semibold text-[#e0def4] mb-4">Group Members</h2>
+        {errorMembers && <p className="text-sm text-red-400 bg-red-900/30 p-2 rounded-md mb-3">{errorMembers}</p>}
         {members.length > 0 ? (
           <ul className="space-y-3">
             {members.map((member) => (
-              <li key={member.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-md hover:bg-gray-100">
+              <li key={member.id} className="flex justify-between items-center p-3 bg-[#100c1c]/50 rounded-lg hover:bg-[#231c36]/70 transition-colors duration-150 border border-transparent hover:border-[#2f2447]">
                 <div>
-                  <p className="font-medium text-gray-800">{member.username}</p>
-                  <p className="text-sm text-gray-500">{member.email}</p>
+                  <p className="font-medium text-[#e0def4]">{member.username}</p>
+                  <p className="text-sm text-[#a393c8]">{member.email}</p>
                 </div>
-                {/* Allow removing any member except potentially the current user if they are the only one or owner (add more nuanced logic if needed) */}
                 {currentUser?.id !== member.id && group.created_by_user_id === currentUser?.id && (
                   <button
                     onClick={() => handleRemoveMember(member.id)}
-                    className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-full focus:outline-none"
+                    className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-700/30 rounded-full focus:outline-none transition-colors duration-150"
                     title="Remove member"
                   >
                     <TrashIcon className="h-5 w-5" />
@@ -250,7 +249,7 @@ const GroupDetailPage: React.FC = () => {
             ))}
           </ul>
         ) : (
-          <p className="text-gray-500">No members found or member information is currently unavailable.</p>
+          <p className="text-[#a393c8]">No members found or member information is currently unavailable.</p>
         )}
 
         {group.created_by_user_id === currentUser?.id && (
@@ -258,27 +257,27 @@ const GroupDetailPage: React.FC = () => {
             {!showAddMemberInput ? (
               <button
                 onClick={() => setShowAddMemberInput(true)}
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-[#7847ea] hover:bg-[#6c3ddb] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#1c162c] focus:ring-[#7847ea] h-10 transition-colors duration-150"
               >
                 <UserPlusIcon className="h-5 w-5 mr-2" /> Add Member
               </button>
             ) : (
-              <div className="space-y-3 p-4 border border-gray-200 rounded-md bg-gray-50">
-                <h3 className="text-md font-medium text-gray-700">Add New Member</h3>
+              <div className="space-y-3 p-4 border border-[#2f2447] rounded-lg bg-[#100c1c]/70">
+                <h3 className="text-md font-medium text-[#e0def4]">Add New Member</h3>
                 <input
                   type="email"
                   list="users-datalist"
                   value={newMemberEmail}
                   onChange={(e) => setNewMemberEmail(e.target.value)}
                   placeholder="Enter user's email to add"
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                  className="mt-1 block w-full px-3 py-2 border border-[#2f2447] rounded-lg shadow-sm bg-[#100c1c] text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#7847ea] focus:border-[#7847ea] sm:text-sm"
                 />
                 <datalist id="users-datalist">
                   {usersForSearch.map((u) => (
                     <option key={u.id} value={u.email} />
                   ))}
                 </datalist>
-                {addMemberError && <p className="text-xs text-red-500">{addMemberError}</p>}
+                {addMemberError && <p className="text-xs text-red-400">{addMemberError}</p>}
                 <div className="flex justify-end space-x-2">
                   <button
                     onClick={() => {
@@ -286,14 +285,14 @@ const GroupDetailPage: React.FC = () => {
                       setAddMemberError(null);
                       setNewMemberEmail('');
                     }}
-                    className="px-3 py-1.5 border border-gray-300 text-sm rounded-md hover:bg-gray-100"
+                    className="px-3 py-1.5 border border-[#2f2447] text-sm rounded-lg text-[#a393c8] hover:bg-[#2f2447]/40 focus:outline-none h-9 transition-colors duration-150"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleAddMember}
                     disabled={addMemberLoading}
-                    className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 disabled:opacity-50"
+                    className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-500 disabled:opacity-60 focus:outline-none h-9 transition-colors duration-150"
                   >
                     {addMemberLoading ? 'Adding...' : 'Confirm Add'}
                   </button>
@@ -305,59 +304,67 @@ const GroupDetailPage: React.FC = () => {
       </section>
 
       {/* Expenses Section */}
-      <section className="bg-white shadow-md rounded-lg p-6">
+      <section className="bg-[#1c162c] shadow-xl rounded-xl p-6 border border-solid border-[#2f2447]">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold text-gray-700">Group Expenses</h2>
+          <h2 className="text-xl font-semibold text-[#e0def4]">Group Expenses</h2>
           <Link
             to={`/expenses/new?groupId=${groupId}`} // Pass groupId for pre-selection
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-green-600 hover:bg-green-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#1c162c] focus:ring-green-500 h-10 transition-colors duration-150"
           >
             <PlusCircleIcon className="h-5 w-5 mr-2" /> Add Expense to Group
           </Link>
         </div>
-        {loadingExpenses && <p>Loading expenses...</p>}
-        {errorExpenses && <p className="text-red-500 bg-red-100 p-3 rounded-md">{errorExpenses}</p>}
+        {loadingExpenses && <p className="text-[#a393c8]">Loading expenses...</p>}
+        {errorExpenses && <p className="text-red-400 bg-red-900/30 p-3 rounded-md">{errorExpenses}</p>}
         {!loadingExpenses && !errorExpenses && expenses.length === 0 && (
           <div className="text-center py-6">
-            <DocumentTextIcon className="mx-auto h-10 w-10 text-gray-400" />
-            <p className="mt-2 text-sm text-gray-500">No expenses recorded for this group yet.</p>
+            <DocumentTextIcon className="mx-auto h-10 w-10 text-[#6b5b91]" />
+            <p className="mt-2 text-sm text-[#a393c8]">No expenses recorded for this group yet.</p>
           </div>
         )}
         {!loadingExpenses && !errorExpenses && expenses.length > 0 && (
-          <ul role="list" className="divide-y divide-gray-200">
-            {expenses.map((expense) => (
-              <li key={expense.id} className="py-4 hover:bg-gray-50 transition-colors duration-150 rounded-md -mx-2 px-2">
-                <Link to={`/expenses/${expense.id}`} className="block">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-indigo-600 truncate">{expense.description}</p>
-                    <p className="ml-2 text-sm text-gray-800 font-semibold">${expense.amount.toFixed(2)}</p>
-                  </div>
-                  <div className="mt-2 sm:flex sm:justify-between text-xs text-gray-500">
-                    <div className="sm:flex">
-                      <p className="flex items-center">
-                        <UserIcon className="flex-shrink-0 mr-1 h-4 w-4 text-gray-400" />
-                        Paid by: {expense.paid_by_user_id === currentUser?.id ? 'You' : `User ID: ${expense.paid_by_user_id}`}
-                      </p>
+          <ul role="list" className="divide-y divide-[#2f2447]">
+            {expenses.map((expense) => {
+              const payerParticipant = expense.participant_details?.find(p => p.user_id === expense.paid_by_user_id);
+              const payerName = payerParticipant ? payerParticipant.user.username : (expense.paid_by_user_id ? `User ID: ${expense.paid_by_user_id}` : 'N/A');
+              return (
+                <li key={expense.id} className="py-4 hover:bg-[#231c36]/70 transition-colors duration-150 rounded-md -mx-2 px-2">
+                  <Link to={`/expenses/${expense.id}`} className="block">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium text-[#7847ea] truncate">{expense.description}</p>
+                      <p className="ml-2 text-sm text-[#e0def4] font-semibold">${expense.amount.toFixed(2)}</p>
                     </div>
-                    <div className="mt-1 sm:mt-0 flex items-center">
-                      <p>{new Date(expense.date).toLocaleDateString()}</p>
-                      <ChevronRightIcon className="ml-1.5 h-4 w-4 text-gray-400" />
+                    <div className="mt-2 sm:flex sm:justify-between text-xs text-[#a393c8]">
+                      <div className="sm:flex">
+                        <p className="flex items-center">
+                          <UserIcon className="flex-shrink-0 mr-1 h-4 w-4 text-[#6b5b91]" />
+                          Paid by: {expense.paid_by_user_id === currentUser?.id ? 'You' : payerName}
+                        </p>
+                      </div>
+                      <div className="mt-1 sm:mt-0 flex items-center">
+                        <p>{new Date(expense.date).toLocaleDateString()}</p>
+                        <ChevronRightIcon className="ml-1.5 h-4 w-4 text-[#6b5b91]" />
+                      </div>
                     </div>
-                  </div>
-                </Link>
-              </li>
-            ))}
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>
 
-      <button
-        onClick={handleDeleteGroup} // Connect the delete handler
-        className="ml-auto p-2 text-sm text-red-600 hover:text-red-800 bg-red-100 hover:bg-red-200 rounded-md flex items-center focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-      >
-        <TrashIcon className="h-5 w-5 mr-1" />
-        Delete Group
-      </button>
+      {group.created_by_user_id === currentUser?.id && (
+        <div className="flex justify-end mt-6">
+          <button
+            onClick={handleDeleteGroup} // Connect the delete handler
+            className="p-2 px-4 text-sm text-red-400 hover:text-red-300 bg-red-900/20 hover:bg-red-700/40 rounded-lg flex items-center focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-[#161122] transition-colors duration-150"
+          >
+            <TrashIcon className="h-5 w-5 mr-1.5" />
+            Delete Group
+          </button>
+        </div>
+      )}
     </div>
   );
 };

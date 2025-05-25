@@ -8,7 +8,13 @@ interface ProtectedRouteProps {
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const { token, user } = useAuthStore();
+  const hasAuthStoreHydrated = useAuthStore.persist.hasHydrated(); // Get hydration status
   const location = useLocation();
+
+  if (!hasAuthStoreHydrated) {
+    // Wait for hydration to complete, render nothing or a loading spinner
+    return null; // Or a loading component e.g. <LoadingSpinner />
+  }
 
   if (!token || !user) {
     // User is not authenticated, redirect to login

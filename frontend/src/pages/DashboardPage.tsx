@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
-import { ExpensesService } from '../generated/api';
-import { type ExpenseRead } from '../generated/api'; // Assuming ExpenseRead is the correct type
+import { ExpensesService, type ExpenseRead } from '../generated/api';
 import { PlusCircleIcon, UserGroupIcon, DocumentTextIcon, ArrowRightIcon } from '@heroicons/react/24/outline'; // Example icons
 
 const DashboardPage: React.FC = () => {
   const { user } = useAuthStore();
+  const hasAuthStoreHydrated = useAuthStore.persist.hasHydrated(); // Get hydration status
   const [expenses, setExpenses] = useState<ExpenseRead[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -16,6 +16,11 @@ const DashboardPage: React.FC = () => {
   const [expensesIOwe, setExpensesIOwe] = useState<ExpenseRead[]>([]); // Simplified: expenses others paid for, and I participated
 
   useEffect(() => {
+    if (!hasAuthStoreHydrated) {
+      setLoading(true); // Keep loading until store is hydrated
+      return; // Wait for hydration
+    }
+
     if (user?.id) {
       const fetchExpenses = async () => {
         setLoading(true);
@@ -70,54 +75,54 @@ const DashboardPage: React.FC = () => {
       };
       fetchExpenses();
     }
-  }, [user]);
+  }, [user, hasAuthStoreHydrated]); // Add hasAuthStoreHydrated to dependencies
 
-  if (loading && !user) { // Initial load or if user is not yet available
-    return <div className="text-center py-10">Loading user data...</div>;
+  if (loading && (!user || !hasAuthStoreHydrated)) { // Adjust loading condition
+    return <div className="text-center py-10 text-[#a393c8]">Loading user data...</div>;
   }
 
   if (!user) { // Should be caught by ProtectedRoute, but as a safeguard
-    return <div className="text-center py-10">Please log in to view the dashboard.</div>;
+    return <div className="text-center py-10 text-[#a393c8]">Please log in to view the dashboard.</div>;
   }
 
   const recentExpenses = expenses.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 5);
 
   return (
-    <div className="container mx-auto p-4 space-y-8">
+    <div className="container mx-auto p-4 sm:p-6 lg:p-8 space-y-8">
       <header className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-800">Welcome back, {user.username || user.email}!</h1>
-        <p className="text-gray-600">Here's your financial overview.</p>
+        <h1 className="text-3xl font-bold text-white">Welcome back, {user.username || user.email}!</h1>
+        <p className="text-[#a393c8]">Here's your financial overview.</p>
       </header>
 
       {/* Summary Balances */}
       <section>
-        <h2 className="text-xl font-semibold text-gray-700 mb-4">Your Balances</h2>
+        <h2 className="text-xl font-semibold text-[#e0def4] mb-4">Your Balances</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white p-6 rounded-lg shadow-md">
-            <h3 className="text-lg font-medium text-gray-900">Total You Paid</h3>
-            <p className="text-3xl font-semibold text-indigo-600 mt-2">${totalPaidByMe.toFixed(2)}</p>
-            <p className="text-sm text-gray-500 mt-1">Across {expenses.filter(e => e.paid_by_user_id === user.id).length} expenses</p>
+          <div className="bg-[#1c162c] p-6 rounded-xl shadow-xl border border-solid border-[#2f2447]">
+            <h3 className="text-lg font-medium text-[#e0def4]">Total You Paid</h3>
+            <p className="text-3xl font-semibold text-[#7847ea] mt-2">${totalPaidByMe.toFixed(2)}</p>
+            <p className="text-sm text-[#a393c8] mt-1">Across {expenses.filter(e => e.paid_by_user_id === user.id).length} expenses</p>
           </div>
-          <div className="bg-white p-6 rounded-lg shadow-md">
-            <h3 className="text-lg font-medium text-gray-900">Total You Are Owed (Simplified)</h3>
+          <div className="bg-[#1c162c] p-6 rounded-xl shadow-xl border border-solid border-[#2f2447]">
+            <h3 className="text-lg font-medium text-[#e0def4]">Total You Are Owed (Simplified)</h3>
             {/* This is a very simplified view. True amount owed requires summing up shares. */}
-            <p className="text-3xl font-semibold text-green-600 mt-2">
+            <p className="text-3xl font-semibold text-green-400 mt-2">
               {/* Sum of amounts of expenses where user paid and others participated */}
               ${expensesOwedToMe.reduce((sum, exp) => sum + exp.amount, 0).toFixed(2)}
             </p>
-            <p className="text-sm text-gray-500 mt-1">From {expensesOwedToMe.length} expenses you paid for</p>
+            <p className="text-sm text-[#a393c8] mt-1">From {expensesOwedToMe.length} expenses you paid for</p>
           </div>
-          <div className="bg-white p-6 rounded-lg shadow-md">
-            <h3 className="text-lg font-medium text-gray-900">Total You Owe (Simplified)</h3>
+          <div className="bg-[#1c162c] p-6 rounded-xl shadow-xl border border-solid border-[#2f2447]">
+            <h3 className="text-lg font-medium text-[#e0def4]">Total You Owe (Simplified)</h3>
             {/* This is a very simplified view. True amount user owes requires summing up their shares. */}
-            <p className="text-3xl font-semibold text-red-600 mt-2">
+            <p className="text-3xl font-semibold text-red-400 mt-2">
               {/* Sum of amounts of expenses where user participated and others paid */}
               ${expensesIOwe.reduce((sum, exp) => sum + exp.amount, 0).toFixed(2)}
             </p>
-            <p className="text-sm text-gray-500 mt-1">Across {expensesIOwe.length} expenses others paid for</p>
+            <p className="text-sm text-[#a393c8] mt-1">Across {expensesIOwe.length} expenses others paid for</p>
           </div>
         </div>
-        <p className="text-sm text-gray-600 mt-4">
+        <p className="text-sm text-[#a393c8] mt-4">
           Net balance calculation is complex and involves detailed share tracking per expense.
           The above "Total You Are Owed" and "Total You Owe" are based on full expense amounts where you are involved, not your specific shares.
         </p>
@@ -125,17 +130,17 @@ const DashboardPage: React.FC = () => {
 
       {/* Quick Links/Actions */}
       <section>
-        <h2 className="text-xl font-semibold text-gray-700 mb-4">Quick Actions</h2>
+        <h2 className="text-xl font-semibold text-[#e0def4] mb-4">Quick Actions</h2>
         <div className="flex space-x-4">
           <Link
             to="/expenses/new"
-            className="flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            className="flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-lg text-white bg-[#7847ea] hover:bg-[#6c3ddb] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#161122] focus:ring-[#7847ea] h-11"
           >
             <PlusCircleIcon className="h-5 w-5 mr-2" /> Add New Expense
           </Link>
           <Link
             to="/groups/new"
-            className="flex items-center justify-center px-6 py-3 border border-gray-300 text-base font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            className="flex items-center justify-center px-6 py-3 border border-[#7847ea] text-base font-medium rounded-lg text-[#7847ea] bg-transparent hover:bg-[#7847ea]/10 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#161122] focus:ring-[#7847ea] h-11"
           >
             <UserGroupIcon className="h-5 w-5 mr-2" /> Create New Group
           </Link>
@@ -144,50 +149,55 @@ const DashboardPage: React.FC = () => {
 
       {/* Recent Activity */}
       <section>
-        <h2 className="text-xl font-semibold text-gray-700 mb-4">Recent Activity</h2>
-        {loading && <p>Loading recent activity...</p>}
-        {error && <p className="text-red-500 bg-red-100 p-3 rounded-md">{error}</p>}
-        {!loading && !error && expenses.length === 0 && <p>No expenses recorded yet.</p>}
+        <h2 className="text-xl font-semibold text-[#e0def4] mb-4">Recent Activity</h2>
+        {loading && <p className="text-[#a393c8]">Loading recent activity...</p>}
+        {error && <p className="text-red-400 bg-red-900/30 p-3 rounded-lg border border-red-700/50">{error}</p>}
+        {!loading && !error && expenses.length === 0 && <p className="text-[#a393c8]">No expenses recorded yet.</p>}
         {!loading && !error && expenses.length > 0 && (
-          <div className="bg-white shadow overflow-hidden sm:rounded-md">
-            <ul role="list" className="divide-y divide-gray-200">
-              {recentExpenses.map((expense) => (
-                <li key={expense.id}>
-                  <Link to={`/expenses/${expense.id}`} className="block hover:bg-gray-50">
-                    <div className="px-4 py-4 sm:px-6">
-                      <div className="flex items-center justify-between">
-                        <p className="text-sm font-medium text-indigo-600 truncate">{expense.description}</p>
-                        <p className="ml-2 text-sm text-gray-500">${expense.amount.toFixed(2)}</p>
-                      </div>
-                      <div className="mt-2 sm:flex sm:justify-between">
-                        <div className="sm:flex">
-                          <p className="flex items-center text-sm text-gray-500">
-                            <DocumentTextIcon className="flex-shrink-0 mr-1.5 h-5 w-5 text-gray-400" aria-hidden="true" />
-                            Paid by: {expense.paid_by_user_id === user.id ? 'You' : expense.payer?.username || 'N/A'}
-                            {/* Assuming payer object with username might be part of ExpenseRead, or needs fetching */}
-                          </p>
-                          {expense.group && (
-                            <p className="mt-2 flex items-center text-sm text-gray-500 sm:mt-0 sm:ml-6">
-                              <UserGroupIcon className="flex-shrink-0 mr-1.5 h-5 w-5 text-gray-400" aria-hidden="true" />
-                              Group: {expense.group.name}
+          <div className="bg-[#1c162c] shadow-xl overflow-hidden sm:rounded-xl border border-solid border-[#2f2447]">
+            <ul role="list" className="divide-y divide-[#2f2447]">
+              {recentExpenses.map((expense) => {
+                const payerParticipant = expense.participant_details?.find(p => p.user_id === expense.paid_by_user_id);
+                const payerName = payerParticipant ? payerParticipant.user.username : 'N/A';
+
+                return (
+                  <li key={expense.id}>
+                    <Link to={`/expenses/${expense.id}`} className="block hover:bg-[#231c36] transition-colors duration-150">
+                      <div className="px-4 py-4 sm:px-6">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-medium text-[#7847ea] truncate">{expense.description}</p>
+                          <p className="ml-2 text-sm text-[#a393c8]">${expense.amount.toFixed(2)}</p>
+                        </div>
+                        <div className="mt-2 sm:flex sm:justify-between">
+                          <div className="sm:flex">
+                            <p className="flex items-center text-sm text-[#a393c8]">
+                              <DocumentTextIcon className="flex-shrink-0 mr-1.5 h-5 w-5 text-[#6b5b91]" aria-hidden="true" />
+                              Paid by: {expense.paid_by_user_id === user.id ? 'You' : payerName}
                             </p>
-                          )}
-                        </div>
-                        <div className="mt-2 flex items-center text-sm text-gray-500 sm:mt-0">
-                          <p>{new Date(expense.date).toLocaleDateString()}</p>
-                          <ArrowRightIcon className="ml-2 h-4 w-4 text-gray-400" />
+                            {expense.group_id && (
+                              <p className="mt-2 flex items-center text-sm text-[#a393c8] sm:mt-0 sm:ml-6">
+                                <UserGroupIcon className="flex-shrink-0 mr-1.5 h-5 w-5 text-[#6b5b91]" aria-hidden="true" />
+                                {/* Displaying Group ID. Future: fetch and display group name. */}
+                                Group ID: {expense.group_id}
+                              </p>
+                            )}
+                          </div>
+                          <div className="mt-2 flex items-center text-sm text-[#a393c8] sm:mt-0">
+                            <p>{new Date(expense.date).toLocaleDateString()}</p>
+                            <ArrowRightIcon className="ml-2 h-4 w-4 text-[#6b5b91]" />
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </Link>
-                </li>
-              ))}
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         )}
         {!loading && !error && expenses.length > 5 && (
           <div className="mt-4 text-center">
-            <Link to="/expenses" className="text-sm font-medium text-indigo-600 hover:text-indigo-500">
+            <Link to="/expenses" className="text-sm font-medium text-[#7847ea] hover:text-[#a393c8]">
               View all expenses <span aria-hidden="true">&rarr;</span>
             </Link>
           </div>

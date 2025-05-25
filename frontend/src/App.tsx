@@ -1,4 +1,5 @@
 import { Routes, Route } from 'react-router-dom';
+import { useEffect } from 'react';
 import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
@@ -12,19 +13,35 @@ import GroupDetailPage from './pages/groups/GroupDetailPage';
 import GroupEditPage from './pages/groups/GroupEditPage';
 import ExpenseCreatePage from './pages/expenses/ExpenseCreatePage';
 import ExpenseDetailPage from './pages/expenses/ExpenseDetailPage';
-import ExpenseEditPage from './pages/expenses/ExpenseEditPage'; // Import ExpenseEditPage
+import ExpenseEditPage from './pages/expenses/ExpenseEditPage';
+import LandingPageContent from './pages/LandingPageContent';
 import './App.css';
+import { useAuthStore } from './store/authStore';
+import { OpenAPI } from './generated/api';
 
 function App() {
+  // Subscribe to token and _hasHydrated state from the store
+  const token = useAuthStore((state) => state.token);
+  const hasHydrated = useAuthStore((state) => state._hasHydrated);
+
+  useEffect(() => {
+    // Only proceed if the store has rehydrated
+    if (hasHydrated) {
+      if (token) {
+        OpenAPI.TOKEN = token ?? undefined;
+      } else {
+        // Ensure OpenAPI.TOKEN is undefined if no token in store
+        if (OpenAPI.TOKEN !== undefined) {
+          OpenAPI.TOKEN = undefined;
+        }
+      }
+    }
+  }, [token, hasHydrated]); // Re-run effect if token or hasHydrated changes
+
   return (
     <Layout>
       <Routes>
-        <Route path="/" element={
-          <div>
-            <h1>Welcome to SpendShare</h1>
-            <p>This is the main content area.</p>
-          </div>
-        } />
+        <Route path="/" element={<LandingPageContent />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
         

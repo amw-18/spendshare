@@ -1,8 +1,9 @@
 #root {
   max-width: 1280px;
   margin: 0 auto;
-  padding: 2rem;
+  /* padding: 2rem; */ /* Removed to allow h-screen on login/signup */
   text-align: center;
+  height: 100%; /* Ensure #root takes full height of its parent (body) */
 }
 
 .logo {
