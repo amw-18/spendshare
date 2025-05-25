@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { DefaultService, type GroupRead } from '../generated/api'; // Assuming GroupRead is the correct type
+import { GroupsService } from '../generated/api';
+import { type GroupRead } from '../generated/api'; // Assuming GroupRead is the correct type
 import { PlusCircleIcon, UserGroupIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import { useAuthStore } from '../store/authStore';
 
@@ -16,8 +17,9 @@ const GroupsPage: React.FC = () => {
         setLoading(true);
         setError(null);
         try {
-          // Assuming readGroupsApiV1GroupsGet fetches groups for the authenticated user
-          const response = await DefaultService.readGroupsApiV1GroupsGet({}); // Empty object if no params needed
+          // Assuming readGroupsEndpointApiV1GroupsGet fetches groups for the authenticated user
+          // It takes optional skip and limit parameters. Calling with no arguments fetches with defaults (e.g., limit 100).
+          const response = await GroupsService.readGroupsEndpointApiV1GroupsGet();
           setGroups(response);
         } catch (err: any) {
           setError(err.message || 'Failed to fetch groups.');

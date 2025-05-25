@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'; // Added useEffect
 import { useNavigate, useLocation } from 'react-router-dom'; // Added useLocation
-import { DefaultService, type Body_login_for_access_token_api_v1_users_token_post, OpenAPI } from '../generated/api';
+import { UsersService, OpenAPI } from '../generated/api';
+import { type Body_login_for_access_token_api_v1_users_token_post, type Token, type UserRead } from '../generated/api'; // Assuming Token and UserRead are relevant
 import { useAuthStore } from '../store/authStore';
 
 const LoginPage: React.FC = () => {
@@ -58,14 +59,14 @@ const LoginPage: React.FC = () => {
       loginData.append('password', password);
 
 
-      const tokenResponse = await DefaultService.loginForAccessTokenApiV1UsersTokenPost(loginData);
+      const tokenResponse: Token = await UsersService.loginForAccessTokenApiV1UsersTokenPost(loginData);
       const token = tokenResponse.access_token;
 
       // Configure API client to use this token for subsequent requests
       OpenAPI.TOKEN = token; // Set token for future requests
 
       // Fetch the current user's details
-      const user = await DefaultService.readCurrentUserApiV1UsersMeGet();
+      const user: UserRead = await UsersService.readUserMeApiV1UsersMeGet();
 
       // Store the token and user details
       setToken(token, user);
