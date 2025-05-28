@@ -52,23 +52,29 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
+    final theme = Theme.of(context);
 
     return Scaffold(
+      // AppBar styling will be inherited from appBarTheme
       appBar: AppBar(
-        title: const Text('Login to SpendShare'),
+        title: Text(
+          'Login to SpendShare',
+          // style: theme.textTheme.headlineSmall?.copyWith(color: theme.colorScheme.onPrimaryContainer), // Example if specific color needed
+        ),
         centerTitle: true,
       ),
       body: SingleChildScrollView(
-        padding: formHorizontalPadding.copyWith(top: 40, bottom: 20),
+        // Using theme consistent padding where possible, or keeping existing if specific
+        padding: formHorizontalPadding.copyWith(top: 32, bottom: 16), // Adjusted spacing
         child: Form(
           key: _formKey,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              // TODO: Add App Logo or Welcome Text if desired
-              // const Text('Welcome Back!', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-              // const SizedBox(height: formVerticalSpacing * 2),
+              // Example of a themed welcome text if it were added:
+              // Text('Welcome Back!', style: theme.textTheme.headlineMedium, textAlign: TextAlign.center),
+              // const SizedBox(height: formVerticalSpacing * 2), // Keep or adjust based on design
 
               CustomTextField(
                 controller: _usernameController,
@@ -109,36 +115,39 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: formVerticalSpacing * 0.5),
               // TODO: Add 'Forgot Password?' TextButton if needed
               // Align(alignment: Alignment.centerRight, child: TextButton(onPressed: () {}, child: Text('Forgot Password?'))),
-              const SizedBox(height: formVerticalSpacing * 1.5),
+              const SizedBox(height: formVerticalSpacing * 1.5), // Keep or adjust
               if (authProvider.status == AuthStatus.loading)
-                const Center(child: CircularProgressIndicator())
+                Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(theme.colorScheme.primary)))
               else
                 ElevatedButton(
-                  style: ElevatedButton.styleFrom(
+                  // ElevatedButton style is now primarily from theme
+                  // Keep minimumSize if it's a specific layout requirement here
+                  style: ElevatedButton.styleFrom( 
                     minimumSize: const Size(double.infinity, formButtonHeight),
                   ),
                   onPressed: _submitForm,
-                  child: const Text('Login'),
+                  child: Text('Login', style: theme.elevatedButtonTheme.style?.textStyle?.resolve({})), // Ensure button text style from theme
                 ),
-              const SizedBox(height: formVerticalSpacing),
+              const SizedBox(height: formVerticalSpacing), // Keep or adjust
               if (authProvider.status == AuthStatus.error && authProvider.errorMessage != null)
                 Padding(
-                  padding: const EdgeInsets.only(bottom: formVerticalSpacing),
+                  padding: const EdgeInsets.only(bottom: formVerticalSpacing), // Keep or adjust
                   child: Text(
                     authProvider.errorMessage!,
-                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                    style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.error),
                     textAlign: TextAlign.center,
                   ),
                 ),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: <Widget>[
-                  const Text("Don't have an account?"),
+                  Text("Don't have an account?", style: theme.textTheme.bodyMedium),
                   TextButton(
+                    // TextButton style is from theme
                     onPressed: () {
                       Navigator.of(context).pushNamed(RouteNames.signup);
                     },
-                    child: const Text('Sign Up'),
+                    child: Text('Sign Up', style: theme.textButtonTheme.style?.textStyle?.resolve({})),
                   ),
                 ],
               ),

@@ -30,21 +30,20 @@ class CustomTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Using InputDecorationTheme from AppTheme by default
-    // Specific overrides can be done here if needed
+    final theme = Theme.of(context);
+
+    // InputDecoration will be merged with the global inputDecorationTheme
+    // We only define properties here that are specific to this instance
+    // or need to be slightly different from the global theme.
     return TextFormField(
       controller: controller,
       decoration: InputDecoration(
-        labelText: labelText,
-        hintText: hintText,
-        prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
-        // border: OutlineInputBorder( // Defined in AppTheme
-        //   borderRadius: BorderRadius.circular(8.0),
-        // ),
-        // fillColor: AppTheme.surfaceColor.withOpacity(0.5), // Defined in AppTheme
-        // filled: true, // Defined in AppTheme
-        // labelStyle: TextStyle(color: AppTheme.textColorSecondary), // Defined in AppTheme
-        // hintStyle: TextStyle(color: AppTheme.textColorSecondary.withOpacity(0.7)), // Defined in AppTheme
+        labelText: labelText, // labelStyle will come from inputDecorationTheme.labelStyle
+        hintText: hintText,   // hintStyle will come from inputDecorationTheme.hintStyle
+        prefixIcon: prefixIcon != null 
+            ? Icon(prefixIcon, color: theme.inputDecorationTheme.prefixIconColor ?? theme.colorScheme.onSurface.withOpacity(0.7)) 
+            : null,
+        // Other properties like border, fillColor, filled are inherited from inputDecorationTheme
       ),
       obscureText: obscureText,
       keyboardType: keyboardType,
@@ -52,7 +51,10 @@ class CustomTextField extends StatelessWidget {
       focusNode: focusNode,
       onFieldSubmitted: onFieldSubmitted,
       textInputAction: textInputAction,
-      style: TextStyle(color: AppTheme.textColorPrimary), // Ensure input text color is readable
+      // Style for the text being input by the user
+      style: theme.textTheme.bodyLarge?.copyWith(
+        color: theme.colorScheme.onSurface, // Text color on the input field surface
+      ),
     );
   }
 }

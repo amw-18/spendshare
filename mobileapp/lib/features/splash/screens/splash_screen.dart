@@ -28,15 +28,26 @@ class _SplashScreenState extends State<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
+      // backgroundColor is handled by theme.scaffoldBackgroundColor
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: const <Widget>[
-            CircularProgressIndicator(),
-            SizedBox(height: 20),
-            Text('SpendShare', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-            Text('Loading...'),
+          children: <Widget>[
+            CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(theme.colorScheme.primary),
+            ),
+            const SizedBox(height: 24), // Consistent spacing
+            Text(
+              'SpendShare',
+              style: theme.textTheme.headlineMedium?.copyWith(color: theme.colorScheme.onBackground),
+            ),
+            const SizedBox(height: 8), // Consistent spacing
+            Text(
+              'Loading...',
+              style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onBackground.withOpacity(0.7)),
+            ),
           ],
         ),
       ),
