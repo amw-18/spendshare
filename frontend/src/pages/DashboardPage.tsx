@@ -1,15 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
-import { ExpensesService, type ExpenseRead } from '../generated/api';
-import { PlusCircleIcon, UserGroupIcon, DocumentTextIcon, ArrowRightIcon } from '@heroicons/react/24/outline'; // Example icons
+import { ExpensesService, type ExpenseRead } from '../generated/api'; // Assuming this is used for other parts
+import { fetchUserBalances } from '../../services/BalanceService'; // Added
+import type { UserBalanceResponse, CurrencyBalance } from '../../types/balanceTypes'; // Added
+import { PlusCircleIcon, UserGroupIcon, DocumentTextIcon, ArrowRightIcon, WalletIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline'; // Added WalletIcon, ExclamationTriangleIcon
 
 const DashboardPage: React.FC = () => {
   const { user } = useAuthStore();
   const hasAuthStoreHydrated = useAuthStore.persist.hasHydrated(); // Get hydration status
   const [expenses, setExpenses] = useState<ExpenseRead[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(true); // For existing expense loading
+  const [error, setError] = useState<string | null>(null); // For existing expense errors
+
+  // New state for balances
+  const [userBalances, setUserBalances] = useState<UserBalanceResponse | null>(null);
+  const [balancesLoading, setBalancesLoading] = useState<boolean>(true);
+  const [balancesError, setBalancesError] = useState<string | null>(null);
 
   const [totalPaidByMe, setTotalPaidByMe] = useState<number>(0);
   const [expensesOwedToMe, setExpensesOwedToMe] = useState<ExpenseRead[]>([]); // Simplified: expenses I paid for, and others participated
@@ -17,12 +24,14 @@ const DashboardPage: React.FC = () => {
 
   useEffect(() => {
     if (!hasAuthStoreHydrated) {
-      setLoading(true); // Keep loading until store is hydrated
+      setLoading(true); 
+      setBalancesLoading(true); // Keep loading until store is hydrated
       return; // Wait for hydration
     }
 
     if (user?.id) {
-      const fetchExpenses = async () => {
+      const fetchDashboardData = async () => {
+        // Fetch expenses (existing logic)
         setLoading(true);
         setError(null);
         try {
@@ -40,15 +49,15 @@ const DashboardPage: React.FC = () => {
           // or it returns all expenses accessible to the user.
           // The schema shows `user_id: number (Query)` for `read_expenses_api_v1_expenses_get`.
           // This suggests it's for filtering expenses *related* to the user.
-          const response = await ExpensesService.readExpensesEndpointApiV1ExpensesGet(undefined, 100, user.id); // skip, limit, userId
-          setExpenses(response);
+          const expenseResponse = await ExpensesService.readExpensesEndpointApiV1ExpensesGet(undefined, 100, user.id); // skip, limit, userId
+          setExpenses(expenseResponse);
 
-          // Calculate summaries
+          // Calculate summaries (existing logic)
           let paidByMe = 0;
           const owedToMe: ExpenseRead[] = [];
           const iOwe: ExpenseRead[] = [];
 
-          response.forEach(expense => {
+          expenseResponse.forEach(expense => {
             if (expense.paid_by_user_id === user.id) {
               paidByMe += expense.amount;
               if (expense.participant_details && expense.participant_details.some(p => p.user_id !== user.id)) {
@@ -72,13 +81,28 @@ const DashboardPage: React.FC = () => {
         } finally {
           setLoading(false);
         }
-      };
-      fetchExpenses();
-    }
-  }, [user, hasAuthStoreHydrated]); // Add hasAuthStoreHydrated to dependencies
 
-  if (loading && (!user || !hasAuthStoreHydrated)) { // Adjust loading condition
-    return <div className="text-center py-10 text-[#a393c8]">Loading user data...</div>;
+        // Fetch balances
+        setBalancesLoading(true);
+        setBalancesError(null);
+        try {
+          const balanceData = await fetchUserBalances();
+          setUserBalances(balanceData);
+        } catch (err: any) {
+          setBalancesError(err.message || 'Failed to fetch balances.');
+        } finally {
+          setBalancesLoading(false);
+        }
+      };
+      fetchDashboardData();
+    }
+  }, [user, hasAuthStoreHydrated]);
+
+  // Combined loading state for initial page load
+  const initialLoading = (loading || balancesLoading) && (!user || !hasAuthStoreHydrated);
+
+  if (initialLoading) {
+    return <div className="text-center py-10 text-[#a393c8]">Loading dashboard data...</div>;
   }
 
   if (!user) { // Should be caught by ProtectedRoute, but as a safeguard
@@ -126,6 +150,45 @@ const DashboardPage: React.FC = () => {
           Net balance calculation is complex and involves detailed share tracking per expense.
           The above "Total You Are Owed" and "Total You Owe" are based on full expense amounts where you are involved, not your specific shares.
         </p>
+      </section>
+      
+      {/* Per-Currency Balances Section */}
+      <section>
+        <h2 className="text-xl font-semibold text-[#e0def4] mb-4 flex items-center">
+          <WalletIcon className="h-6 w-6 mr-2 text-[#7847ea]" />
+          Your Balances by Currency
+        </h2>
+        {balancesLoading && <p className="text-[#a393c8]">Loading balances...</p>}
+        {balancesError && (
+          <div className="bg-red-900/30 p-4 rounded-lg border border-red-700/50 text-red-300 flex items-center">
+            <ExclamationTriangleIcon className="h-5 w-5 mr-2" />
+            <p>{balancesError}</p>
+          </div>
+        )}
+        {!balancesLoading && !balancesError && userBalances && (
+          <>
+            {userBalances.balances.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {userBalances.balances.map((cb) => (
+                  <div key={cb.currency.id} className="bg-[#1c162c] p-6 rounded-xl shadow-xl border border-solid border-[#2f2447]">
+                    <h3 className="text-lg font-medium text-[#e0def4]">{cb.currency.name} ({cb.currency.code})</h3>
+                    <p className="text-md text-[#a393c8] mt-3">
+                      Total Paid: <span className="font-semibold text-white">{cb.currency.symbol || cb.currency.code}{cb.total_paid.toFixed(2)}</span>
+                    </p>
+                    <p className="text-md text-green-400 mt-1">
+                      You are Owed: <span className="font-semibold">{cb.currency.symbol || cb.currency.code}{cb.net_owed_to_user.toFixed(2)}</span>
+                    </p>
+                    <p className="text-md text-red-400 mt-1">
+                      You Owe: <span className="font-semibold">{cb.currency.symbol || cb.currency.code}{cb.net_user_owes.toFixed(2)}</span>
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[#a393c8] italic">No currency balances found.</p>
+            )}
+          </>
+        )}
       </section>
 
       {/* Quick Links/Actions */}
