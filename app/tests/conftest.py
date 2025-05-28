@@ -5,6 +5,7 @@ import pytest_asyncio  # For async fixtures
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import sessionmaker
+import os # Added os import
 from sqlmodel import SQLModel, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -13,13 +14,17 @@ from src.main import app  # Your FastAPI application instance
 
 
 from src.core.security import get_password_hash  # Added get_password_hash
-from src.models.models import (
+from src.models.models import ( # Restore global imports for fixture type hints and instantiation
+    User,
+    Group,
+    UserGroupLink,
     Expense,
     ExpenseParticipant,
-    User,
-)  # Added Expense, ExpenseParticipant
+    Currency,
+    ConversionRate,
+)
 
-TEST_DATABASE_PATH = "./test_app_temp.db"
+TEST_DATABASE_PATH = "./test_app_temp.db" # Relative to where pytest is run, ensure this path is correct. /app/app/test_app_temp.db
 # Use a separate SQLite database for testing
 TEST_DATABASE_URL = f"sqlite+aiosqlite:///{TEST_DATABASE_PATH}"
 
@@ -44,16 +49,25 @@ app.dependency_overrides[get_session] = override_get_session
 
 @pytest_asyncio.fixture(scope="function", autouse=True)
 async def db_setup_session():
-    # This fixture runs once per session.
-    # Create tables before tests run, and drop them after.
+    # Ensure a clean slate for each test
+    if os.path.exists(TEST_DATABASE_PATH):
+        os.remove(TEST_DATABASE_PATH) # Delete the DB file if it exists
+
+    SQLModel.metadata.clear() # Clear global metadata
+
+    # Models are already imported globally at the top of this file.
+    # SQLModel.metadata.create_all will use those globally registered models.
+    # No need to re-import here if global imports are comprehensive and correct.
+
     async with test_engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
     yield
     async with test_engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.drop_all)
-
-    # if os.path.exists(TEST_DATABASE_PATH):
-    #     os.remove(TEST_DATABASE_PATH)
+    
+    # Clean up the database file after tests if it was created
+    if os.path.exists(TEST_DATABASE_PATH):
+        os.remove(TEST_DATABASE_PATH)
 
 
 @pytest_asyncio.fixture(

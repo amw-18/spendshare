@@ -215,3 +215,32 @@ class CurrencyUpdate(SQLModel):
         if len(v) != 3:
             raise ValueError('Currency code must be 3 characters long')
         return v
+
+# User Balance Schemas
+class CurrencyBalance(SQLModel):
+    currency: CurrencyRead # Now CurrencyRead is defined above
+    total_paid: float = 0.0
+    net_owed_to_user: float = 0.0
+    net_user_owes: float = 0.0
+
+
+class UserBalanceResponse(SQLModel):
+    balances: List[CurrencyBalance]
+
+
+# ConversionRate Schemas
+class ConversionRateBase(SQLModel):
+    from_currency_id: int
+    to_currency_id: int
+    rate: float = Field(gt=0)
+
+
+class ConversionRateCreate(ConversionRateBase):
+    pass
+
+
+class ConversionRateRead(ConversionRateBase):
+    id: int
+    timestamp: datetime
+    from_currency: Optional[CurrencyRead] = None
+    to_currency: Optional[CurrencyRead] = None

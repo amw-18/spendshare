@@ -1,21 +1,24 @@
 from typing import List, Optional
 from sqlmodel import Field, Relationship, SQLModel
 from datetime import datetime, timezone
-from sqlalchemy import Column, ForeignKey, Integer
+from sqlalchemy import Column, ForeignKey, Integer, UniqueConstraint # Added UniqueConstraint
 
 
 class UserGroupLink(SQLModel, table=True):
+    __table_args__ = {'extend_existing': True}
     user_id: int = Field(default=None, sa_column=Column(Integer, ForeignKey("user.id", ondelete="CASCADE"), primary_key=True))
     group_id: int = Field(default=None, sa_column=Column(Integer, ForeignKey("group.id", ondelete="CASCADE"), primary_key=True))
 
 
 class ExpenseParticipant(SQLModel, table=True):
+    __table_args__ = {'extend_existing': True}
     user_id: int = Field(default=None, sa_column=Column(Integer, ForeignKey("user.id", ondelete="CASCADE"), primary_key=True))
     expense_id: int = Field(default=None, sa_column=Column(Integer, ForeignKey("expense.id", ondelete="CASCADE"), primary_key=True))
     share_amount: Optional[float] = Field(default=None)
 
 
 class User(SQLModel, table=True):
+    __table_args__ = {'extend_existing': True}
     id: Optional[int] = Field(default=None, primary_key=True)
     username: str = Field(index=True, unique=True)
     email: str = Field(unique=True, index=True)
@@ -43,6 +46,7 @@ class User(SQLModel, table=True):
 
 
 class Group(SQLModel, table=True):
+    __table_args__ = {'extend_existing': True}
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(index=True)
     created_by_user_id: int = Field(sa_column=Column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False))
@@ -61,6 +65,7 @@ class Group(SQLModel, table=True):
 
 
 class Expense(SQLModel, table=True):
+    __table_args__ = {'extend_existing': True}
     id: Optional[int] = Field(default=None, primary_key=True)
     description: str
     amount: float
@@ -89,8 +94,38 @@ class Expense(SQLModel, table=True):
 
 
 class Currency(SQLModel, table=True):
+    __table_args__ = {'extend_existing': True}
     id: Optional[int] = Field(default=None, primary_key=True)
     code: str = Field(unique=True, index=True)
     name: str = Field(index=True)
     symbol: Optional[str] = Field(default=None)
     expenses: List["Expense"] = Relationship(back_populates="currency")
+    conversion_rates_from: List["ConversionRate"] = Relationship(
+        back_populates="from_currency", 
+        sa_relationship_kwargs={"foreign_keys": "[ConversionRate.from_currency_id]"}
+    )
+    conversion_rates_to: List["ConversionRate"] = Relationship(
+        back_populates="to_currency", 
+        sa_relationship_kwargs={"foreign_keys": "[ConversionRate.to_currency_id]"}
+    )
+
+
+class ConversionRate(SQLModel, table=True):
+    __table_args__ = (
+        UniqueConstraint("from_currency_id", "to_currency_id", "timestamp", name="uq_conversion_rate_from_to_timestamp"),
+        {'extend_existing': True}
+    )
+    id: Optional[int] = Field(default=None, primary_key=True)
+    from_currency_id: int = Field(sa_column=Column(Integer, ForeignKey("currency.id", ondelete="CASCADE")))
+    to_currency_id: int = Field(sa_column=Column(Integer, ForeignKey("currency.id", ondelete="CASCADE")))
+    rate: float = Field(gt=0)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
+
+    from_currency: Optional["Currency"] = Relationship(
+        back_populates="conversion_rates_from",
+        sa_relationship_kwargs={"foreign_keys": "[ConversionRate.from_currency_id]"}
+    )
+    to_currency: Optional["Currency"] = Relationship(
+        back_populates="conversion_rates_to",
+        sa_relationship_kwargs={"foreign_keys": "[ConversionRate.to_currency_id]"}
+    )
