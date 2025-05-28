@@ -13,61 +13,60 @@ class DashboardScreen extends StatelessWidget {
     // In a real app, you'd fetch user details to display name, etc.
     // For now, using a generic welcome or fetching from authProvider if available.
     final userName = authProvider.currentUser?.username ?? 'User';
+    final theme = Theme.of(context);
 
     return Scaffold(
+      // AppBar styling is now primarily from theme
       appBar: AppBar(
-        title: const Text('Dashboard'),
-        centerTitle: true,
+        title: const Text('Dashboard'), // Text style will be from theme.appBarTheme.titleTextStyle
+        centerTitle: true, // Keep if desired
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout),
+            icon: const Icon(Icons.logout), // Icon color from theme.appBarTheme.iconTheme
             tooltip: 'Logout',
             onPressed: () async {
               await authProvider.logout();
-              // The Consumer in main.dart should handle navigation to LoginScreen
-              // If not, uncomment and adjust:
-              // Navigator.of(context).pushNamedAndRemoveUntil(RouteNames.login, (route) => false);
+              // Navigation handled by Consumer in main.dart
             },
           ),
         ],
       ),
       body: SingleChildScrollView(
-        padding: formHorizontalPadding.copyWith(top: 20, bottom: 20),
+        padding: formHorizontalPadding.copyWith(top: 24, bottom: 24), // Adjusted padding
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
               'Welcome, $userName!',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onBackground,
+              style: theme.textTheme.headlineSmall?.copyWith(
+                    color: theme.colorScheme.onBackground, // Ensure text color is appropriate for background
                   ),
             ),
-            const SizedBox(height: formVerticalSpacing * 1.5),
+            const SizedBox(height: formVerticalSpacing * 1.5), // Keep or adjust spacing
             
-            // Placeholder for an overview/summary section
             _buildSectionTitle(context, 'Overview'),
+            // Card styling is from theme.cardTheme
             Card(
               child: Padding(
-                padding: const EdgeInsets.all(16.0),
+                padding: const EdgeInsets.all(16.0), // Keep padding for content inside card
                 child: Center(
                   child: Text(
                     'Summary of your spending will appear here.',
-                    style: Theme.of(context).textTheme.bodyMedium,
+                    style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
                     textAlign: TextAlign.center,
                   ),
                 ),
               ),
             ),
-            const SizedBox(height: formVerticalSpacing * 1.5),
+            const SizedBox(height: formVerticalSpacing * 1.5), // Keep or adjust
 
-            // Navigation Section
             _buildSectionTitle(context, 'Quick Actions'),
             GridView.count(
               crossAxisCount: 2,
               shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(), // to disable GridView's scrolling
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisSpacing: 16, // Keep specific layout spacing
+              mainAxisSpacing: 16, // Keep specific layout spacing
               children: <Widget>[
                 _buildActionCard(
                   context,
@@ -79,17 +78,15 @@ class DashboardScreen extends StatelessWidget {
                   context,
                   icon: Icons.add_circle_outline,
                   label: 'New Group',
-                  routeName: RouteNames.groupCreateEdit, // Assuming this route exists for new group
+                  routeName: RouteNames.groupCreateEdit,
                 ),
                 _buildActionCard(
                   context,
                   icon: Icons.receipt_long,
                   label: 'All Expenses',
-                  // TODO: Define a route for viewing all expenses if different from group details
-                  // routeName: RouteNames.allExpensesList, 
                   onTap: () {
                      ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('All Expenses - Coming Soon!')),
+                      SnackBar(content: Text('All Expenses - Coming Soon!', style: theme.snackBarTheme.contentTextStyle)),
                     );
                   }
                 ),
@@ -97,28 +94,23 @@ class DashboardScreen extends StatelessWidget {
                   context,
                   icon: Icons.post_add,
                   label: 'Add Expense',
-                  // This might navigate to a screen to select a group first, or a general expense add screen
-                  // routeName: RouteNames.expenseCreateEdit, 
                   onTap: () {
-                    // Example: Navigate to create expense, might need group context
-                    // For now, a placeholder or direct navigation if applicable
-                    // Navigator.of(context).pushNamed(RouteNames.expenseCreateEdit);
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Add Expense - Coming Soon!')),
+                      SnackBar(content: Text('Add Expense - Coming Soon!', style: theme.snackBarTheme.contentTextStyle)),
                     );
                   }
                 ),
               ],
             ),
-            const SizedBox(height: formVerticalSpacing * 1.5),
+            const SizedBox(height: formVerticalSpacing * 1.5), // Keep or adjust
 
             _buildSectionTitle(context, 'Settings'),
              _buildActionCard(
                   context,
-                  icon: Icons.person_outline,
+                  icon: Icons.person_outline, // Example Icon
                   label: 'My Profile',
-                  routeName: RouteNames.profile,
-                  isFullWidth: true, // Make it take full width if it's the only one in a row
+                  routeName: RouteNames.profile, // Example Route
+                  isFullWidth: true,
                 ),
           ],
         ),
@@ -127,13 +119,14 @@ class DashboardScreen extends StatelessWidget {
   }
 
   Widget _buildSectionTitle(BuildContext context, String title) {
+    final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12.0),
+      padding: const EdgeInsets.only(bottom: 12.0), // Keep or adjust
       child: Text(
         title,
-        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              color: Theme.of(context).colorScheme.onBackground,
-              fontWeight: FontWeight.bold,
+        style: theme.textTheme.titleLarge?.copyWith(
+              color: theme.colorScheme.onBackground,
+              // fontWeight: FontWeight.bold, // titleLarge from theme should have appropriate weight
             ),
       ),
     );
@@ -146,28 +139,30 @@ class DashboardScreen extends StatelessWidget {
     VoidCallback? onTap,
     bool isFullWidth = false,
   }) {
+    final theme = Theme.of(context);
     final cardContent = Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: <Widget>[
-        Icon(icon, size: 40.0, color: Theme.of(context).colorScheme.primary),
-        const SizedBox(height: 10.0),
+        Icon(icon, size: 40.0, color: theme.colorScheme.primary), // Icon size can be specific
+        const SizedBox(height: 10.0), // Keep or adjust
         Text(
           label,
           textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.labelLarge?.copyWith(
-            color: Theme.of(context).colorScheme.onSurface, // Ensure text is readable on card
+          style: theme.textTheme.labelLarge?.copyWith( // Using labelLarge for button-like text
+            color: theme.colorScheme.onSurface,
           ),
         ),
       ],
     );
 
+    // Card styling from theme.cardTheme (elevation, shape, color)
     final card = Card(
-      elevation: 2.0,
       child: InkWell(
         onTap: onTap ?? (routeName != null ? () => Navigator.of(context).pushNamed(routeName) : null),
-        borderRadius: BorderRadius.circular(8.0), // Match card's default border radius
+        // borderRadius should match Card's shape from theme if possible, or define explicitly if cardTheme is not rounded
+        borderRadius: (theme.cardTheme.shape as RoundedRectangleBorder?)?.borderRadius as BorderRadiusGeometry? ?? BorderRadius.circular(12.0),
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(16.0), // Keep padding for content
           child: Center(child: cardContent),
         ),
       ),
