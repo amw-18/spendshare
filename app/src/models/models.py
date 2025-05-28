@@ -72,6 +72,9 @@ class Expense(SQLModel, table=True):
     group_id: Optional[int] = Field(default=None, sa_column=Column(Integer, ForeignKey("group.id", ondelete="CASCADE"), nullable=True))
     group: Optional["Group"] = Relationship(back_populates="expenses")
 
+    currency_id: Optional[int] = Field(default=None, foreign_key="currency.id")
+    currency: Optional["Currency"] = Relationship(back_populates="expenses")
+
     participants: List["User"] = Relationship(
         back_populates="expenses_participated_in",
         link_model=ExpenseParticipant,
@@ -83,3 +86,11 @@ class Expense(SQLModel, table=True):
 # This might not be strictly necessary with SQLModel if types are strings,
 # but it's good practice for linters and type checkers.
 # However, SQLModel handles string forward references automatically.
+
+
+class Currency(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    code: str = Field(unique=True, index=True)
+    name: str = Field(index=True)
+    symbol: Optional[str] = Field(default=None)
+    expenses: List["Expense"] = Relationship(back_populates="currency")

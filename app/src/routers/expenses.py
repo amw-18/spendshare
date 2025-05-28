@@ -12,7 +12,8 @@ from src.models.models import (
     User,
     Group,
     ExpenseParticipant,
-)  # User is imported here
+    Currency, # Added Currency
+)
 from src.models import schemas
 from src.core.security import get_current_user  # Added get_current_user
 from src.utils import get_object_or_404  # Removed get_optional_object_by_attribute
@@ -33,6 +34,9 @@ async def create_expense_with_participants_endpoint(
 ) -> models.Expense:
     # Inline expense_service.create_expense_with_participants
     # payer = await get_object_or_404(session, User, expense_in.paid_by_user_id) # Removed, will use current_user
+
+    # Validate currency_id
+    await get_object_or_404(session, Currency, expense_in.currency_id)
 
     if expense_in.group_id:
         group = await get_object_or_404(session, Group, expense_in.group_id)
@@ -92,6 +96,9 @@ async def create_expense_endpoint(
 ) -> models.Expense:
     # payer = await get_object_or_404(session, User, expense_in.paid_by_user_id) # Removed, will use current_user
 
+    # Validate currency_id
+    await get_object_or_404(session, Currency, expense_in.currency_id)
+
     if expense_in.group_id:
         await get_object_or_404(session, Group, expense_in.group_id)  # Check existence
 
@@ -116,8 +123,8 @@ async def read_expenses_endpoint(
     user_id: Optional[int] = None,
     group_id: Optional[int] = None,
     current_user: models.User = Depends(get_current_user),
-) -> List[models.Expense]:
-    statement = select(Expense)
+) -> List[models.Expense]: # Return type is List[models.Expense], conversion to schema happens later if needed
+    statement = select(Expense).options(selectinload(Expense.currency)) # Added selectinload for currency
     if user_id:
         # Inline crud_expense.get_expenses_for_user
         # This assumes user can be payer or participant.
@@ -165,7 +172,11 @@ async def read_expense_endpoint(
     statement = (
         select(models.Expense)
         .where(models.Expense.id == expense_id)
-        .options(selectinload(models.Expense.paid_by), selectinload(models.Expense.participants))
+        .options(
+            selectinload(models.Expense.paid_by), 
+            selectinload(models.Expense.participants),
+            selectinload(models.Expense.currency) # Added selectinload for currency
+        )
     )
     result = await session.exec(statement)
     db_expense = result.first()
@@ -314,6 +325,10 @@ async def update_expense_endpoint(
         #     pass
         # else:
         await get_object_or_404(session, Group, db_expense.group_id)
+    
+    if "currency_id" in expense_data and expense_data["currency_id"] is not None:
+        await get_object_or_404(session, Currency, expense_data["currency_id"])
+        # setattr will handle the update of db_expense.currency_id
 
     session.add(db_expense)
     await session.commit()
@@ -395,6 +410,14 @@ async def _get_expense_read_details(
         # If paid_by_user_id is not null, we might need to fetch it explicitly if not loaded.
         # However, selectinload should handle this. If paid_by_user is None here, it's likely
         # because paid_by_user_id was indeed NULL in the database for this expense.
-        expense_read_data.paid_by_user = None 
+        expense_read_data.paid_by_user = None
+    
+    # Populate currency field
+    if db_expense.currency:
+        expense_read_data.currency = schemas.CurrencyRead.model_validate(db_expense.currency)
+    else:
+        # If db_expense.currency is None (e.g. currency_id was null and no currency loaded)
+        # then expense_read_data.currency will remain None as per schema definition.
+        expense_read_data.currency = None
 
     return expense_read_data

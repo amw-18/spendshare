@@ -101,13 +101,14 @@ class GroupUpdate(SQLModel):
 
 # Expense Schemas
 class ExpenseBase(SQLModel):
-    description: constr(min_length=1) 
+    description: constr(min_length=1)
     amount: float = Field(gt=0)
+    currency_id: int # Added currency_id
     group_id: Optional[int] = None
 
 
 class ExpenseCreate(ExpenseBase):
-    pass  
+    pass
 
 
 class ExpenseRead(ExpenseBase):
@@ -115,8 +116,9 @@ class ExpenseRead(ExpenseBase):
     date: datetime
     paid_by_user_id: Optional[int] = None
     paid_by_user: Optional[UserRead] = None
-    description: str = Field(default="") 
-    participant_details: List["ExpenseParticipantReadWithUser"] = [] 
+    currency: Optional["CurrencyRead"] = None # Added currency
+    description: str = Field(default="")
+    participant_details: List["ExpenseParticipantReadWithUser"] = []
 
 
 class ExpenseUpdate(SQLModel):
@@ -124,7 +126,8 @@ class ExpenseUpdate(SQLModel):
     amount: Optional[float] = Field(default=None, gt=0)
     paid_by_user_id: Optional[int] = None
     group_id: Optional[int] = None
-    participants: Optional[List["ParticipantUpdate"]] = None 
+    currency_id: Optional[int] = None # Added currency_id
+    participants: Optional[List["ParticipantUpdate"]] = None
 
 
 # Schema for Participant Update
@@ -171,3 +174,44 @@ class ExpenseParticipantCreate(SQLModel):
     user_id: int
     expense_id: int
     share_amount: Optional[float] = None
+
+
+# Currency Schemas
+class CurrencyBase(SQLModel):
+    code: constr(min_length=3, max_length=3)
+    name: str
+    symbol: Optional[str] = None
+
+    @field_validator('code')
+    @classmethod
+    def validate_code_format(cls, v: str) -> str:
+        if not v.isupper():
+            raise ValueError('Currency code must be uppercase')
+        if len(v) != 3:
+            raise ValueError('Currency code must be 3 characters long')
+        return v
+
+
+class CurrencyCreate(CurrencyBase):
+    pass
+
+
+class CurrencyRead(CurrencyBase):
+    id: int
+
+
+class CurrencyUpdate(SQLModel):
+    code: Optional[constr(min_length=3, max_length=3)] = None
+    name: Optional[str] = None
+    symbol: Optional[str] = None
+
+    @field_validator('code')
+    @classmethod
+    def validate_code_format_if_provided(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        if not v.isupper():
+            raise ValueError('Currency code must be uppercase')
+        if len(v) != 3:
+            raise ValueError('Currency code must be 3 characters long')
+        return v
