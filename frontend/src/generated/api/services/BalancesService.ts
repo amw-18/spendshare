@@ -2,19 +2,20 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { UserBalanceResponse } from '../models/UserBalanceResponse';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
-export class DefaultService {
+export class BalancesService {
     /**
-     * Read Root
-     * @returns any Successful Response
+     * Get User Balances
+     * @returns UserBalanceResponse Successful Response
      * @throws ApiError
      */
-    public static readRootGet(): CancelablePromise<any> {
+    public static getUserBalancesApiV1BalancesMeGet(): CancelablePromise<UserBalanceResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/',
+            url: '/api/v1/balances/me',
         });
     }
 }

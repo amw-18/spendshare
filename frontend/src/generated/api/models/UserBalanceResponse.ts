@@ -2,10 +2,8 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type UserRead = {
-    username: string;
-    email: string;
-    id: number;
-    is_admin: boolean;
+import type { CurrencyBalance } from './CurrencyBalance';
+export type UserBalanceResponse = {
+    balances: Array<CurrencyBalance>;
 };
 

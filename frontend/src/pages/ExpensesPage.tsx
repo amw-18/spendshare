@@ -152,7 +152,7 @@ const ExpenseListPage: React.FC = () => {
                   <div className="px-4 py-4 sm:px-6">
                     <div className="flex items-center justify-between">
                       <p className="text-md font-medium text-[#7847ea] truncate w-3/5 sm:w-auto">{expense.description || 'Untitled Expense'}</p>
-                      <p className="ml-2 text-md text-white font-semibold">${expense.amount.toFixed(2)}</p>
+                      <p className="ml-2 text-md text-white font-semibold">{expense.currency?.symbol || ''}{expense.amount.toFixed(2)}{!expense.currency?.symbol && expense.currency?.code ? ` ${expense.currency.code}` : ''}</p>
                     </div>
                     <div className="mt-2 sm:flex sm:justify-between text-sm text-[#a393c8]">
                       <div className="sm:flex sm:space-x-4">

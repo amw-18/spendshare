@@ -1,4 +1,4 @@
-/* generated using openapi-typescript-codegen -- do no edit */
+/* generated using openapi-typescript-codegen -- do not edit */
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
@@ -6,13 +6,10 @@ import type { Body_create_expense_with_participants_endpoint_api_v1_expenses_ser
 import type { ExpenseCreate } from '../models/ExpenseCreate';
 import type { ExpenseRead } from '../models/ExpenseRead';
 import type { ExpenseUpdate } from '../models/ExpenseUpdate';
-
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
-
 export class ExpensesService {
-
     /**
      * Create Expense With Participants Endpoint
      * @param requestBody
@@ -32,7 +29,6 @@ export class ExpensesService {
             },
         });
     }
-
     /**
      * Create Expense Endpoint
      * @param requestBody
@@ -52,7 +48,6 @@ export class ExpensesService {
             },
         });
     }
-
     /**
      * Read Expenses Endpoint
      * @param skip
@@ -82,7 +77,6 @@ export class ExpensesService {
             },
         });
     }
-
     /**
      * Read Expense Endpoint
      * @param expenseId
@@ -103,7 +97,6 @@ export class ExpensesService {
             },
         });
     }
-
     /**
      * Update Expense Endpoint
      * @param expenseId
@@ -128,7 +121,6 @@ export class ExpensesService {
             },
         });
     }
-
     /**
      * Delete Expense Endpoint
      * @param expenseId
@@ -149,5 +141,4 @@ export class ExpensesService {
             },
         });
     }
-
 }

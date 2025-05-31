@@ -12,8 +12,10 @@ import {
   ExpensesService,
   GroupsService,
   UsersService,
+  CurrenciesService, // Added CurrenciesService
   type GroupRead,
   type UserRead,
+  type CurrencyRead, // Added CurrencyRead
   type Body_create_expense_with_participants_endpoint_api_v1_expenses_service__post as ExpenseWithParticipantsCreate,
   type ExpenseCreate,
 } from '../../generated/api';
@@ -95,6 +97,10 @@ const ExpenseCreatePage: React.FC = () => {
   const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
   const [participantUserIds, setParticipantUserIds] = useState<number[]>([]);
 
+  // Currency state
+  const [currencies, setCurrencies] = useState<CurrencyRead[]>([]);
+  const [selectedCurrencyOption, setSelectedCurrencyOption] = useState<SingleValue<BaseOptionType>>(null);
+
   // Data for selects/options
   const [userGroups, setUserGroups] = useState<GroupRead[]>([]);
   const [availableParticipants, setAvailableParticipants] = useState<UserRead[]>([]);
@@ -115,11 +121,17 @@ const ExpenseCreatePage: React.FC = () => {
       try {
         const groupsPromise = GroupsService.readGroupsEndpointApiV1GroupsGet();
         const usersPromise = UsersService.readUsersEndpointApiV1UsersGet();
+        const currenciesPromise = CurrenciesService.listCurrenciesApiV1CurrenciesGet(undefined, 500); // Fetch currencies, skip=undefined, limit=500
 
-        const [groupsResponse, usersResponse] = await Promise.all([groupsPromise, usersPromise]);
+        const [groupsResponse, usersResponse, currenciesResponse] = await Promise.all([
+          groupsPromise,
+          usersPromise,
+          currenciesPromise
+        ]);
 
         setUserGroups(groupsResponse);
         setAvailableParticipants(usersResponse); // Default to all users
+        setCurrencies(currenciesResponse); // Set currencies
 
         if (groupIdFromUrl && !isNaN(parseInt(groupIdFromUrl))) {
           const numGroupId = parseInt(groupIdFromUrl);
@@ -143,6 +155,7 @@ const ExpenseCreatePage: React.FC = () => {
         setError("Failed to load necessary data. Please try refreshing.");
         setUserGroups([]); // Ensure groups is empty on error
         setAvailableParticipants([]); // Ensure participants is empty on error
+        setCurrencies([]); // Ensure currencies is empty on error
       } finally {
         setLoadingInitialData(false);
       }
@@ -199,30 +212,43 @@ const ExpenseCreatePage: React.FC = () => {
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setError(null);
+
+    const numericAmount = parseFloat(amount);
+    if (isNaN(numericAmount) || numericAmount <= 0) {
+      setError('Please enter a valid positive amount.');
+      setLoading(false);
+      return;
+    }
+
+    if (!selectedCurrencyOption?.value) {
+      setError('Please select a currency.');
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+
     if (!currentUser) {
       setError("You must be logged in to create an expense.");
       return;
     }
 
-    if (!description.trim() || !amount) {
-      setError('Description and Amount are required.');
-      return;
-    }
-    const numericAmount = parseFloat(amount);
-    if (isNaN(numericAmount) || numericAmount <= 0) {
-      setError('Amount must be a positive number.');
+    if (!description.trim()) { // Amount check is already done with numericAmount
+      setError('Description is required.');
+      setLoading(false);
       return;
     }
 
-    const expensePayload: ExpenseCreate = {
+    const expenseData: ExpenseCreate = {
       description,
-      amount: parseFloat(amount),
-      group_id: selectedGroupId !== null ? selectedGroupId : undefined,
-      // date will be set by backend default if not provided
+      amount: numericAmount, // Use parsed numeric amount
+      currency_id: selectedCurrencyOption.value as number, // Add currency_id
+      group_id: selectedGroupId,
     };
 
-    const expenseData: ExpenseWithParticipantsCreate = {
-      expense_in: expensePayload, // Corrected key
+    const expenseDataWithParticipants: ExpenseWithParticipantsCreate = {
+      expense_in: expenseData, // Corrected key
       participant_user_ids: participantUserIds,
     };
 
@@ -230,7 +256,7 @@ const ExpenseCreatePage: React.FC = () => {
 
     try {
       setError(null);
-      await ExpensesService.createExpenseWithParticipantsEndpointApiV1ExpensesServicePost(expenseData);
+      await ExpensesService.createExpenseWithParticipantsEndpointApiV1ExpensesServicePost(expenseDataWithParticipants);
       // Redirect after successful creation
       if (selectedGroupId) {
         navigate(`/groups/${selectedGroupId}`); // To group detail page
@@ -312,6 +338,27 @@ const ExpenseCreatePage: React.FC = () => {
               step="0.01"
               min="0.01"
             />
+          </div>
+
+          {/* Currency Selection */}
+          <div className="mb-6">
+            <label htmlFor="currency" className="block text-sm font-medium text-[#e0def4] mb-1 text-left">
+              Currency <span className="text-red-400">*</span>
+            </label>
+            <Select<BaseOptionType, false, GroupBase<BaseOptionType>>
+              id="currency"
+              instanceId="currency-select"
+              options={currencies.map((c) => ({ value: c.id, label: `${c.code} - ${c.name}` }))}
+              value={selectedCurrencyOption}
+              onChange={(option: SingleValue<BaseOptionType>) => setSelectedCurrencyOption(option)}
+              styles={customStyles}
+              placeholder="Select currency..."
+              isLoading={loadingInitialData} // Use loadingInitialData to indicate currencies are loading
+              isDisabled={loadingInitialData || currencies.length === 0}
+              isClearable
+              required // HTML5 required, also handled in handleSubmit
+            />
+            {/* Error for currency loading can be part of the main 'error' state or a specific one if needed */}
           </div>
 
           <div>

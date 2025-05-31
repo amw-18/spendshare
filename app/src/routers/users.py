@@ -71,14 +71,7 @@ async def read_users_endpoint(
     session: AsyncSession = Depends(get_session),
     skip: int = 0,
     limit: int = 100,
-    current_user: User = Depends(get_current_user),
 ) -> List[User]:
-    if not current_user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to list users",
-        )
-    # Logic from crud_user.get_users
     statement = select(User).offset(skip).limit(limit)
     result = await session.exec(statement)
     users = list(result)
@@ -264,30 +257,5 @@ async def login_for_access_token(
     # Create access token
     access_token = create_access_token(
         data={"sub": user.username, "user_id": user.id}  # Add user_id to token payload
-    )
-    return {"access_token": access_token, "token_type": "bearer"}
-
-
-@router.post("/admin/login_as/{target_user_id}", response_model=schemas.Token)
-async def admin_login_as_user(
-    target_user_id: int,
-    current_user: User = Depends(
-        get_current_user
-    ),  # Ensures this endpoint is protected
-    session: AsyncSession = Depends(get_session),
-):
-    if not current_user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized for this action",
-        )
-
-    target_user = await get_object_or_404(session, User, target_user_id)
-
-    # Create access token for the target user
-    # Ensure the payload matches what get_current_user expects, e.g., 'sub' for username
-    # and potentially 'user_id'.
-    access_token = create_access_token(
-        data={"sub": target_user.username, "user_id": target_user.id}
     )
     return {"access_token": access_token, "token_type": "bearer"}

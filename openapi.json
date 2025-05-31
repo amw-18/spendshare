@@ -1,8 +1,8 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Expense Tracker API",
-    "description": "API for managing expenses, users, and groups.",
+    "title": "SpendShare API - Development",
+    "description": "API for managing expenses, users, and groups in SpendShare.",
     "version": "0.1.0"
   },
   "paths": {
@@ -105,6 +105,85 @@
             }
           }
         }
+      }
+    },
+    "/api/v1/users/search": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Search Users Endpoint",
+        "description": "Search for users by username or email.\nReturns a list of users matching the query.\nAccessible to any authenticated user.",
+        "operationId": "search_users_endpoint_api_v1_users_search_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Query"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UserRead"
+                  },
+                  "title": "Response Search Users Endpoint Api V1 Users Search Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/me": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Read Current User Me Endpoint",
+        "description": "Get current logged-in user.",
+        "operationId": "read_current_user_me_endpoint_api_v1_users_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserRead"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
       }
     },
     "/api/v1/users/{user_id}": {
@@ -725,7 +804,7 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "description": "Successful Response",
             "content": {
               "application/json": {
@@ -776,7 +855,7 @@
           }
         },
         "responses": {
-          "200": {
+          "201": {
             "description": "Successful Response",
             "content": {
               "application/json": {
@@ -1039,6 +1118,433 @@
         }
       }
     },
+    "/api/v1/currencies/": {
+      "post": {
+        "tags": [
+          "Currencies"
+        ],
+        "summary": "Create Currency",
+        "operationId": "create_currency_api_v1_currencies__post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CurrencyCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrencyRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Currencies"
+        ],
+        "summary": "List Currencies",
+        "operationId": "list_currencies_api_v1_currencies__get",
+        "parameters": [
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CurrencyRead"
+                  },
+                  "title": "Response List Currencies Api V1 Currencies  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/currencies/{currency_id}": {
+      "get": {
+        "tags": [
+          "Currencies"
+        ],
+        "summary": "Get Currency",
+        "operationId": "get_currency_api_v1_currencies__currency_id__get",
+        "parameters": [
+          {
+            "name": "currency_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Currency Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrencyRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Currencies"
+        ],
+        "summary": "Update Currency",
+        "operationId": "update_currency_api_v1_currencies__currency_id__put",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "currency_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Currency Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CurrencyUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrencyRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Currencies"
+        ],
+        "summary": "Delete Currency",
+        "operationId": "delete_currency_api_v1_currencies__currency_id__delete",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "currency_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Currency Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Delete Currency Api V1 Currencies  Currency Id  Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/balances/me": {
+      "get": {
+        "tags": [
+          "Balances"
+        ],
+        "summary": "Get User Balances",
+        "operationId": "get_user_balances_api_v1_balances_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserBalanceResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/conversion-rates/": {
+      "post": {
+        "tags": [
+          "Conversion Rates"
+        ],
+        "summary": "Create Conversion Rate",
+        "operationId": "create_conversion_rate_api_v1_conversion_rates__post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversionRateCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversionRateRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Conversion Rates"
+        ],
+        "summary": "Read Conversion Rates",
+        "operationId": "read_conversion_rates_api_v1_conversion_rates__get",
+        "parameters": [
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ConversionRateRead"
+                  },
+                  "title": "Response Read Conversion Rates Api V1 Conversion Rates  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/conversion-rates/latest": {
+      "get": {
+        "tags": [
+          "Conversion Rates"
+        ],
+        "summary": "Read Latest Conversion Rate",
+        "operationId": "read_latest_conversion_rate_api_v1_conversion_rates_latest_get",
+        "parameters": [
+          {
+            "name": "from_code",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Currency code to convert from (e.g., USD)",
+              "title": "From Code"
+            },
+            "description": "Currency code to convert from (e.g., USD)"
+          },
+          {
+            "name": "to_code",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Currency code to convert to (e.g., EUR)",
+              "title": "To Code"
+            },
+            "description": "Currency code to convert to (e.g., EUR)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversionRateRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/": {
       "get": {
         "summary": "Read Root",
@@ -1135,6 +1641,220 @@
         ],
         "title": "Body_login_for_access_token_api_v1_users_token_post"
       },
+      "ConversionRateCreate": {
+        "properties": {
+          "from_currency_id": {
+            "type": "integer",
+            "title": "From Currency Id"
+          },
+          "to_currency_id": {
+            "type": "integer",
+            "title": "To Currency Id"
+          },
+          "rate": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Rate"
+          }
+        },
+        "type": "object",
+        "required": [
+          "from_currency_id",
+          "to_currency_id",
+          "rate"
+        ],
+        "title": "ConversionRateCreate"
+      },
+      "ConversionRateRead": {
+        "properties": {
+          "from_currency_id": {
+            "type": "integer",
+            "title": "From Currency Id"
+          },
+          "to_currency_id": {
+            "type": "integer",
+            "title": "To Currency Id"
+          },
+          "rate": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Rate"
+          },
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp"
+          },
+          "from_currency": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CurrencyRead"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "to_currency": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CurrencyRead"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "from_currency_id",
+          "to_currency_id",
+          "rate",
+          "id",
+          "timestamp"
+        ],
+        "title": "ConversionRateRead"
+      },
+      "CurrencyBalance": {
+        "properties": {
+          "currency": {
+            "$ref": "#/components/schemas/CurrencyRead"
+          },
+          "total_paid": {
+            "type": "number",
+            "title": "Total Paid",
+            "default": 0.0
+          },
+          "net_owed_to_user": {
+            "type": "number",
+            "title": "Net Owed To User",
+            "default": 0.0
+          },
+          "net_user_owes": {
+            "type": "number",
+            "title": "Net User Owes",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "currency"
+        ],
+        "title": "CurrencyBalance"
+      },
+      "CurrencyCreate": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "name"
+        ],
+        "title": "CurrencyCreate"
+      },
+      "CurrencyRead": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol"
+          },
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "name",
+          "id"
+        ],
+        "title": "CurrencyRead"
+      },
+      "CurrencyUpdate": {
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 3,
+                "minLength": 3
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol"
+          }
+        },
+        "type": "object",
+        "title": "CurrencyUpdate"
+      },
       "ExpenseCreate": {
         "properties": {
           "description": {
@@ -1146,6 +1866,10 @@
             "type": "number",
             "exclusiveMinimum": 0.0,
             "title": "Amount"
+          },
+          "currency_id": {
+            "type": "integer",
+            "title": "Currency Id"
           },
           "group_id": {
             "anyOf": [
@@ -1162,7 +1886,8 @@
         "type": "object",
         "required": [
           "description",
-          "amount"
+          "amount",
+          "currency_id"
         ],
         "title": "ExpenseCreate"
       },
@@ -1212,6 +1937,10 @@
             "exclusiveMinimum": 0.0,
             "title": "Amount"
           },
+          "currency_id": {
+            "type": "integer",
+            "title": "Currency Id"
+          },
           "group_id": {
             "anyOf": [
               {
@@ -1243,6 +1972,26 @@
             ],
             "title": "Paid By User Id"
           },
+          "paid_by_user": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserRead"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CurrencyRead"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "participant_details": {
             "items": {
               "$ref": "#/components/schemas/ExpenseParticipantReadWithUser"
@@ -1255,6 +2004,7 @@
         "type": "object",
         "required": [
           "amount",
+          "currency_id",
           "id",
           "date"
         ],
@@ -1307,6 +2057,17 @@
               }
             ],
             "title": "Group Id"
+          },
+          "currency_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency Id"
           },
           "participants": {
             "anyOf": [
@@ -1459,6 +2220,22 @@
           "token_type"
         ],
         "title": "Token"
+      },
+      "UserBalanceResponse": {
+        "properties": {
+          "balances": {
+            "items": {
+              "$ref": "#/components/schemas/CurrencyBalance"
+            },
+            "type": "array",
+            "title": "Balances"
+          }
+        },
+        "type": "object",
+        "required": [
+          "balances"
+        ],
+        "title": "UserBalanceResponse"
       },
       "UserCreate": {
         "properties": {

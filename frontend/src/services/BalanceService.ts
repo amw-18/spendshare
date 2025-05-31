@@ -1,11 +1,12 @@
 // frontend/src/services/BalanceService.ts
 import axios from 'axios';
-import { UserBalanceResponse } from '../types/balanceTypes'; // Adjust path as necessary
+import type { UserBalanceResponse } from '../types/balanceTypes'; // Adjust path as necessary
+import { useAuthStore } from '../store/authStore'; // Import the auth store
 
-// Function to get the auth token (example implementation)
-// In a real app, this would likely come from a state management store or a dedicated auth module
+// Function to get the auth token
 const getAuthToken = (): string | null => {
-  return localStorage.getItem('access_token'); // Common way to store tokens
+  // Retrieve the token from the Zustand auth store
+  return useAuthStore.getState().token;
 };
 
 // Base URL for the API. This might be configured globally for axios.
