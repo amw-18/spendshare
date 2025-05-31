@@ -1,21 +1,21 @@
-from typing import List, Optional  # Removed Any
-from fastapi import APIRouter, Depends, HTTPException, Body, status  # Added status
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Body, status
 from sqlmodel.ext.asyncio.session import AsyncSession
-from sqlmodel import select, delete
+from sqlmodel import select
 from sqlalchemy import or_
-from sqlalchemy.orm import selectinload  # Added selectinload
+from sqlalchemy.orm import selectinload
 
 from src.db.database import get_session
-from src.models import models  # Used as models.Expense in type hints
 from src.models.models import (
     Expense,
     User,
     Group,
     ExpenseParticipant,
-)  # User is imported here
+    Currency,
+)
 from src.models import schemas
-from src.core.security import get_current_user  # Added get_current_user
-from src.utils import get_object_or_404  # Removed get_optional_object_by_attribute
+from src.core.security import get_current_user
+from src.utils import get_object_or_404
 
 router = APIRouter(
     prefix="/expenses",
@@ -23,38 +23,30 @@ router = APIRouter(
 )
 
 
-@router.post("/service/", response_model=schemas.ExpenseRead)
+@router.post("/service/", response_model=schemas.ExpenseRead, status_code=status.HTTP_201_CREATED)
 async def create_expense_with_participants_endpoint(
     *,
     session: AsyncSession = Depends(get_session),
     expense_in: schemas.ExpenseCreate,
     participant_user_ids: List[int] = Body(...),
-    current_user: models.User = Depends(get_current_user),
-) -> models.Expense:
-    # Inline expense_service.create_expense_with_participants
-    # payer = await get_object_or_404(session, User, expense_in.paid_by_user_id) # Removed, will use current_user
+    current_user: User = Depends(get_current_user),
+) -> schemas.ExpenseRead:
+    # Validate currency_id
+    await get_object_or_404(session, Currency, expense_in.currency_id)
 
     if expense_in.group_id:
         group = await get_object_or_404(session, Group, expense_in.group_id)
         # Not assigning to 'group' as it's not used later, just checked for existence.
-        # If it were used, it should be: group = await get_object_or_404(...)
 
     all_participants_in_expense_users = []
     users_sharing_expense_ids = set(participant_user_ids)
     if not participant_user_ids:  # If list is empty, payer is the only participant
-        users_sharing_expense_ids.add(current_user.id)  # Use current_user.id
+        users_sharing_expense_ids.add(current_user.id)
 
-    for user_id_in_set in users_sharing_expense_ids:
-        user = await get_object_or_404(session, User, user_id_in_set)
-        all_participants_in_expense_users.append(user)
+    for participant_id in users_sharing_expense_ids:
+        participant = await get_object_or_404(session, User, participant_id)
+        all_participants_in_expense_users.append(participant)
 
-    if not all_participants_in_expense_users:
-        # This case should ideally not be reached if users_sharing_expense_ids is populated
-        raise HTTPException(
-            status_code=400, detail="No participants specified for the expense."
-        )
-
-    # Create the expense (formerly crud_expense.create_expense)
     db_expense = Expense.model_validate(
         expense_in, update={"paid_by_user_id": current_user.id}
     )
@@ -62,7 +54,6 @@ async def create_expense_with_participants_endpoint(
     await session.commit()
     await session.refresh(db_expense)  # Refresh to get db_expense.id
 
-    # Add participants to the expense (formerly crud_expense.add_participant_to_expense)
     num_participants = len(all_participants_in_expense_users)
     share_amount = None
     if num_participants > 0:
@@ -71,40 +62,70 @@ async def create_expense_with_participants_endpoint(
     for user_obj in all_participants_in_expense_users:
         expense_participant = ExpenseParticipant(
             user_id=user_obj.id,
-            expense_id=db_expense.id,  # Ensure db_expense.id is available
+            expense_id=db_expense.id,
             share_amount=share_amount,
         )
         session.add(expense_participant)
 
     await session.commit()
-    await session.refresh(db_expense)
+    await session.refresh(db_expense) # Refresh again after adding participants
 
-    # Manually construct and return ExpenseRead with participant_details
-    return await _get_expense_read_details(session=session, db_expense=db_expense)
+    # Re-fetch with relationships for ExpenseRead using a select statement
+    stmt = (
+        select(Expense)
+        .where(Expense.id == db_expense.id)
+        .options(
+            selectinload(Expense.currency),
+            selectinload(Expense.paid_by)
+        )
+    )
+    result = await session.exec(stmt)
+    refreshed_db_expense = result.one_or_none()
+
+    if not refreshed_db_expense:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to re-fetch expense after creation with full details")
+
+    return await _get_expense_read_details(session=session, db_expense=refreshed_db_expense)
 
 
-@router.post("/", response_model=schemas.ExpenseRead)
+@router.post("/", response_model=schemas.ExpenseRead, status_code=status.HTTP_201_CREATED)
 async def create_expense_endpoint(
     *,
     session: AsyncSession = Depends(get_session),
     expense_in: schemas.ExpenseCreate,
-    current_user: models.User = Depends(get_current_user),
-) -> models.Expense:
-    # payer = await get_object_or_404(session, User, expense_in.paid_by_user_id) # Removed, will use current_user
+    current_user: User = Depends(get_current_user),
+) -> schemas.ExpenseRead:
+    # Validate currency_id
+    await get_object_or_404(session, Currency, expense_in.currency_id)
 
     if expense_in.group_id:
         await get_object_or_404(session, Group, expense_in.group_id)  # Check existence
 
-    # Inline crud_expense.create_expense
     db_expense = Expense.model_validate(
         expense_in, update={"paid_by_user_id": current_user.id}
-    )  # Changed from Expense(**expense_in.dict())
+    )
     session.add(db_expense)
     await session.commit()
     await session.refresh(db_expense)
+
+    # Re-fetch with relationships for ExpenseRead using a select statement
+    stmt = (
+        select(Expense)
+        .where(Expense.id == db_expense.id)
+        .options(
+            selectinload(Expense.currency),
+            selectinload(Expense.paid_by)
+        )
+    )
+    result = await session.exec(stmt)
+    refreshed_db_expense = result.one_or_none()
+
+    if not refreshed_db_expense:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to re-fetch expense after creation with full details")
+
     # Manually construct and return ExpenseRead with participant_details
     # For simple creation, participants are not added here, so participant_details will be empty.
-    return await _get_expense_read_details(session=session, db_expense=db_expense)
+    return await _get_expense_read_details(session=session, db_expense=refreshed_db_expense)
 
 
 @router.get("/", response_model=List[schemas.ExpenseRead])
@@ -115,19 +136,27 @@ async def read_expenses_endpoint(
     limit: int = 100,
     user_id: Optional[int] = None,
     group_id: Optional[int] = None,
-    current_user: models.User = Depends(get_current_user),
-) -> List[models.Expense]:
-    statement = select(Expense)
+    current_user: User = Depends(get_current_user),
+) -> List[Expense]:
+    # Base query with eager loading
+    statement = select(Expense).options(
+        selectinload(Expense.currency),
+        selectinload(Expense.paid_by)
+    )
     if user_id:
-        # Inline crud_expense.get_expenses_for_user
-        # This assumes user can be payer or participant.
-        # Need ExpenseParticipant table for linking users to expenses they participated in.
+        if not current_user.is_admin:
+            # Non-admin users can only fetch their own expenses
+            if user_id != current_user.id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Not enough permissions to fetch expenses for another user",
+                )
+        # At this point, either user is admin, or user_id matches current_user.id
+        # Filter for expenses where the specified user_id is payer or participant.
         statement = (
-            select(Expense)
-            .join(
+            statement.outerjoin(
                 ExpenseParticipant,
                 Expense.id == ExpenseParticipant.expense_id,
-                isouter=True,
             )
             .where(
                 or_(
@@ -137,16 +166,31 @@ async def read_expenses_endpoint(
             )
             .offset(skip)
             .limit(limit)
-            .distinct()
         )
     elif group_id:
-        # Inline crud_expense.get_expenses_for_group
         statement = (
             statement.where(Expense.group_id == group_id).offset(skip).limit(limit)
         )
-    else:
-        # Inline crud_expense.get_expenses
-        statement = statement.offset(skip).limit(limit)
+    else:  # No user_id or group_id provided
+        if not current_user.is_admin:
+            # Non-admin users see their own expenses
+            statement = (
+                statement.outerjoin(
+                    ExpenseParticipant,
+                    Expense.id == ExpenseParticipant.expense_id,
+                )
+                .where(
+                    or_(
+                        Expense.paid_by_user_id == current_user.id,
+                        ExpenseParticipant.user_id == current_user.id,
+                    )
+                )
+                .offset(skip)
+                .limit(limit)
+            )
+        else:
+            # Admin users see all expenses
+            statement = statement.offset(skip).limit(limit)
 
     result = await session.exec(statement)
     expenses = list(result)
@@ -158,48 +202,65 @@ async def read_expense_endpoint(
     *,
     session: AsyncSession = Depends(get_session),
     expense_id: int,
-    current_user: models.User = Depends(get_current_user),
-) -> (
-    models.Expense
-):  # Keep models.Expense as per original, though schemas.ExpenseRead is what's returned
+    current_user: User = Depends(get_current_user),
+) -> schemas.ExpenseRead:
     statement = (
-        select(models.Expense)
-        .where(models.Expense.id == expense_id)
-        .options(selectinload(models.Expense.paid_by), selectinload(models.Expense.participants))
+        select(Expense)
+        .where(Expense.id == expense_id)
+        .options(
+            selectinload(Expense.paid_by),
+            selectinload(Expense.participants),
+            selectinload(Expense.currency),
+        )
     )
     result = await session.exec(statement)
     db_expense = result.first()
 
     if not db_expense:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expense not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Expense not found"
+        )
 
     if not current_user.is_admin and db_expense.paid_by_user_id != current_user.id:
-        # Check if current_user is a participant in the expense
-        participant_exists_statement = select(ExpenseParticipant).where(
-            ExpenseParticipant.expense_id == expense_id,
-            ExpenseParticipant.user_id == current_user.id,
-        )
-        result = await session.exec(participant_exists_statement)
-        if not result.first():
+        found = False
+        for (
+            participant
+        ) in db_expense.participants:  # already loaded in sql using selectinload
+            found = found or (current_user.id == participant.id)
+        if not found:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not authorized to view this expense",
             )
 
-    # Manually construct and return ExpenseRead with participant_details
     return await _get_expense_read_details(session=session, db_expense=db_expense)
 
 
+# TODO:  audit/test this properly
 @router.put("/{expense_id}", response_model=schemas.ExpenseRead)
 async def update_expense_endpoint(
     *,
     session: AsyncSession = Depends(get_session),
     expense_id: int,
     expense_in: schemas.ExpenseUpdate,
-    current_user: models.User = Depends(get_current_user),
-) -> models.Expense:
-    db_expense = await get_object_or_404(session, Expense, expense_id)
-
+    current_user: User = Depends(get_current_user),
+) -> schemas.ExpenseRead:
+    # TODO:
+    # if the expense is in group, any group member should be allowed
+    # otherwise, only the participants    # Fetch the expense with eager loading for currency and paid_by
+    db_expense = await session.get(
+        Expense, 
+        expense_id, 
+        options=[
+            selectinload(Expense.currency),
+            selectinload(Expense.paid_by)
+        ]
+    )
+    if not db_expense:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Expense with id {expense_id} not found"
+        )
     # Update basic expense fields first
     expense_data = expense_in.model_dump(exclude_unset=True)
 
@@ -217,8 +278,6 @@ async def update_expense_endpoint(
             updated_participant_user_ids_input = [
                 p["user_id"] for p in participants_input_list
             ]
-        else:  # Explicitly None, meaning no change to participants from this field
-            pass  # No need to pop again, already popped. updated_participant_user_ids_input remains None.
 
     for key, value in expense_data.items():
         setattr(db_expense, key, value)
@@ -315,14 +374,31 @@ async def update_expense_endpoint(
         # else:
         await get_object_or_404(session, Group, db_expense.group_id)
 
+    if "currency_id" in expense_data and expense_data["currency_id"] is not None:
+        await get_object_or_404(session, Currency, expense_data["currency_id"])
+        # setattr will handle the update of db_expense.currency_id
+
     session.add(db_expense)
     await session.commit()
     await session.refresh(db_expense)
-    # Refresh related participants if using SQLModel relationships in ExpenseRead
-    # This is often handled automatically by SQLModel if the schema expects it.
+
+    # Re-fetch with relationships for ExpenseRead using a select statement
+    stmt = (
+        select(Expense)
+        .where(Expense.id == db_expense.id)
+        .options(
+            selectinload(Expense.currency),
+            selectinload(Expense.paid_by)
+        )
+    )
+    result = await session.exec(stmt)
+    refreshed_db_expense = result.one_or_none()
+
+    if not refreshed_db_expense:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to re-fetch expense after update with full details")
 
     # Manually construct and return ExpenseRead with participant_details
-    return await _get_expense_read_details(session=session, db_expense=db_expense)
+    return await _get_expense_read_details(session=session, db_expense=refreshed_db_expense)
 
 
 @router.delete("/{expense_id}", response_model=int)
@@ -330,7 +406,7 @@ async def delete_expense_endpoint(
     *,
     session: AsyncSession = Depends(get_session),
     expense_id: int,
-    current_user: models.User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ) -> int:
     db_expense = await get_object_or_404(session, Expense, expense_id)
 
@@ -340,20 +416,11 @@ async def delete_expense_endpoint(
             detail="Not authorized to delete this expense",
         )
 
-    # Inline crud_expense.delete_expense
-    # First, delete related ExpenseParticipant entries
-    # This is important because there's no cascade delete from Expense to ExpenseParticipant in the model
-    participant_links_statement = delete(ExpenseParticipant).where(
-        ExpenseParticipant.expense_id == expense_id
-    )
-    await session.exec(participant_links_statement)
-
-    await session.delete(db_expense)
+    await session.delete(
+        db_expense
+    )  # should cascade delete related ExpenseParticipant entries
     await session.commit()
     return expense_id
-
-
-# The remove_expense_participant_endpoint has been removed.
 
 
 async def _get_expense_read_details(
@@ -361,6 +428,7 @@ async def _get_expense_read_details(
 ) -> schemas.ExpenseRead:
     """
     Helper function to construct ExpenseRead schema with populated participant_details.
+    This version explicitly accesses relationships and builds a dict for validation.
     """
     participant_links_statement = select(ExpenseParticipant).where(
         ExpenseParticipant.expense_id == db_expense.id
@@ -370,31 +438,46 @@ async def _get_expense_read_details(
 
     participant_details_list = []
     for link in participant_links:
-        user = await get_object_or_404(
-            session, User, link.user_id
-        )  # Fetch user details
+        # Fetch user with groups eagerly loaded for UserRead schema
+        user_stmt = select(User).where(User.id == link.user_id).options(selectinload(User.groups))
+        user_result = await session.exec(user_stmt)
+        user = user_result.one_or_none()
+        if not user:
+            # This case should ideally not happen if DB integrity is maintained
+            # and link.user_id is valid. But good to handle.
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, 
+                detail=f"Participant user with id {link.user_id} not found"
+            )
+        
         participant_details_list.append(
             schemas.ExpenseParticipantReadWithUser(
                 user_id=link.user_id,
-                expense_id=link.expense_id,  # Or db_expense.id
+                expense_id=link.expense_id,
                 share_amount=link.share_amount,
-                user=schemas.UserRead.model_validate(
-                    user
-                ),  # Populate UserRead from User model
+                user=schemas.UserRead.model_validate(user), # UserRead expects groups
             )
         )
 
-    # Create ExpenseRead object
-    expense_read_data = schemas.ExpenseRead.model_validate(db_expense)
-    expense_read_data.participant_details = participant_details_list
-    # Ensure paid_by_user is populated if it was loaded
-    if db_expense.paid_by:
-        expense_read_data.paid_by_user = schemas.UserRead.model_validate(db_expense.paid_by)
-    else:
-        # This case implies paid_by_user_id was null or the user object couldn't be loaded.
-        # If paid_by_user_id is not null, we might need to fetch it explicitly if not loaded.
-        # However, selectinload should handle this. If paid_by_user is None here, it's likely
-        # because paid_by_user_id was indeed NULL in the database for this expense.
-        expense_read_data.paid_by_user = None 
+    # Explicitly access relationship attributes. This will fail if not loaded.
+    # We expect these to be pre-loaded by selectinload in the calling router function.
+    loaded_currency = db_expense.currency
+    loaded_paid_by_user = db_expense.paid_by
 
-    return expense_read_data
+    # Prepare data for ExpenseRead schema validation
+    expense_read_payload = {
+        "id": db_expense.id,
+        "date": db_expense.date,
+        "description": db_expense.description,
+        "amount": db_expense.amount,
+        "is_settled": db_expense.is_settled,
+        "paid_by_user_id": db_expense.paid_by_user_id,
+        "currency_id": db_expense.currency_id,
+        "group_id": db_expense.group_id,
+        "paid_by_user": schemas.UserRead.model_validate(loaded_paid_by_user) if loaded_paid_by_user else None,
+        "currency": schemas.CurrencyRead.model_validate(loaded_currency) if loaded_currency else None,
+        "participant_details": participant_details_list,
+    }
+
+    # Validate the constructed dictionary
+    return schemas.ExpenseRead.model_validate(expense_read_payload)

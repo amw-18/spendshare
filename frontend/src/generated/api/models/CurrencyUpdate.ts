@@ -2,10 +2,9 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type UserRead = {
-    username: string;
-    email: string;
-    id: number;
-    is_admin: boolean;
+export type CurrencyUpdate = {
+    code?: (string | null);
+    name?: (string | null);
+    symbol?: (string | null);
 };
 

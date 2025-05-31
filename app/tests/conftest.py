@@ -5,6 +5,7 @@ import pytest_asyncio  # For async fixtures
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import sessionmaker
+# import os # No longer needed after switching to in-memory DB
 from sqlmodel import SQLModel, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -13,15 +14,19 @@ from src.main import app  # Your FastAPI application instance
 
 
 from src.core.security import get_password_hash  # Added get_password_hash
-from src.models.models import (
+from src.models.models import ( # Restore global imports for fixture type hints and instantiation
+    User,
+    Group,
+    UserGroupLink,
     Expense,
     ExpenseParticipant,
-    User,
-)  # Added Expense, ExpenseParticipant
+    Currency,
+    ConversionRate,
+)
 
-TEST_DATABASE_PATH = "./test_app_temp.db"
+# TEST_DATABASE_PATH = "./test_app_temp.db" # Using in-memory database for tests
 # Use a separate SQLite database for testing
-TEST_DATABASE_URL = f"sqlite+aiosqlite:///{TEST_DATABASE_PATH}"
+TEST_DATABASE_URL = "sqlite+aiosqlite:///file:testdb?mode=memory&cache=shared&uri=true" # Using shared in-memory SQLite for tests
 
 test_engine = create_async_engine(
     TEST_DATABASE_URL, echo=False, future=True
@@ -44,16 +49,20 @@ app.dependency_overrides[get_session] = override_get_session
 
 @pytest_asyncio.fixture(scope="function", autouse=True)
 async def db_setup_session():
-    # This fixture runs once per session.
-    # Create tables before tests run, and drop them after.
+    # Using in-memory database, no file pre-cleanup needed.
+    # SQLModel.metadata.clear() # Clear global metadata
+
+    # Models are already imported globally at the top of this file.
+    # SQLModel.metadata.create_all will use those globally registered models.
+    # No need to re-import here if global imports are comprehensive and correct.
+
     async with test_engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
     yield
     async with test_engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.drop_all)
-
-    # if os.path.exists(TEST_DATABASE_PATH):
-    #     os.remove(TEST_DATABASE_PATH)
+    
+    # Using in-memory database, no file post-cleanup needed.
 
 
 @pytest_asyncio.fixture(
@@ -64,6 +73,12 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     # However, with db_setup_session as autouse=True and scope="session", tables are handled globally.
     async with AsyncClient(transport=ASGITransport(app), base_url="http://test") as ac:
         yield ac
+
+
+@pytest_asyncio.fixture(scope="function")
+async def async_db_session() -> AsyncGenerator[AsyncSession, None]:
+    async with TestingSessionLocal() as session:
+        yield session
 
 
 # User Fixtures
@@ -143,6 +158,16 @@ async def admin_user() -> AsyncGenerator[User, None]:
 
             await session.delete(admin_in_session)
             await session.commit()
+
+
+# Currency Fixture
+@pytest_asyncio.fixture
+async def test_currency(async_db_session: AsyncSession) -> Currency:
+    currency = Currency(code="USD", name="US Dollar", symbol="$")
+    async_db_session.add(currency)
+    await async_db_session.commit()
+    await async_db_session.refresh(currency)
+    return currency
 
 
 # Token Fixtures

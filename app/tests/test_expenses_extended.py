@@ -2,7 +2,7 @@ import pytest
 from httpx import AsyncClient
 from fastapi import status
 from typing import Dict, Any
-
+from src.models.models import Currency
 
 # Helper function to create a user
 async def create_test_user(
@@ -73,19 +73,34 @@ async def test_create_expense_empty_description(
 
 @pytest.mark.asyncio
 async def test_expense_filter_by_user(
-    client: AsyncClient, normal_user_token_headers: dict[str, str], normal_user: Any
+    client: AsyncClient, 
+    normal_user_token_headers: dict[str, str], 
+    normal_user: Any,
+    test_currency: Currency  
 ):
     """Test filtering expenses by user_id"""
     # Create a few expenses
-    expense_data1 = {"description": "Filter Test 1", "amount": 100.0}
-    expense_data2 = {"description": "Filter Test 2", "amount": 200.0}
-
-    await client.post(
+    expense_data1 = {
+        "description": "Filter Test 1", 
+        "amount": 100.0, 
+        "currency_id": test_currency.id  
+    }
+    expense_data2 = {
+        "description": "Filter Test 2", 
+        "amount": 200.0, 
+        "currency_id": test_currency.id  
+    }
+    
+    # Check response of creation, useful for debugging
+    response1 = await client.post(
         "/api/v1/expenses/", json=expense_data1, headers=normal_user_token_headers
     )
-    await client.post(
+    assert response1.status_code == status.HTTP_201_CREATED
+
+    response2 = await client.post(
         "/api/v1/expenses/", json=expense_data2, headers=normal_user_token_headers
     )
+    assert response2.status_code == status.HTTP_201_CREATED
 
     # Filter by user_id
     response = await client.get(
@@ -99,7 +114,10 @@ async def test_expense_filter_by_user(
 
 @pytest.mark.asyncio
 async def test_expense_filter_by_group(
-    client: AsyncClient, normal_user_token_headers: dict[str, str], normal_user: Any
+    client: AsyncClient, 
+    normal_user_token_headers: dict[str, str], 
+    normal_user: Any,
+    test_currency: Currency  
 ):
     """Test filtering expenses by group_id"""
     # Create a group first
@@ -115,10 +133,12 @@ async def test_expense_filter_by_group(
         "description": "Group Expense",
         "amount": 150.0,
         "group_id": group_id,
+        "currency_id": test_currency.id  
     }
-    await client.post(
+    expense_creation_response = await client.post(
         "/api/v1/expenses/", json=expense_data, headers=normal_user_token_headers
     )
+    assert expense_creation_response.status_code == status.HTTP_201_CREATED
 
     # Filter by group_id
     response = await client.get(
@@ -132,15 +152,22 @@ async def test_expense_filter_by_group(
 
 @pytest.mark.asyncio
 async def test_expense_pagination(
-    client: AsyncClient, normal_user_token_headers: dict[str, str]
+    client: AsyncClient, 
+    normal_user_token_headers: dict[str, str],
+    test_currency: Currency  
 ):
     """Test expense listing pagination"""
     # Create multiple expenses
     for i in range(5):
-        expense_data = {"description": f"Pagination Test {i}", "amount": 50.0 + i}
-        await client.post(
+        expense_data = {
+            "description": f"Pagination Test {i}", 
+            "amount": 50.0 + i,
+            "currency_id": test_currency.id  
+        }
+        response_create = await client.post(
             "/api/v1/expenses/", json=expense_data, headers=normal_user_token_headers
         )
+        assert response_create.status_code == status.HTTP_201_CREATED
 
     # Test with limit
     response = await client.get(
@@ -161,7 +188,10 @@ async def test_expense_pagination(
 
 @pytest.mark.asyncio
 async def test_expense_share_calculation(
-    client: AsyncClient, normal_user_token_headers: dict[str, str], normal_user: Any
+    client: AsyncClient, 
+    normal_user_token_headers: dict[str, str], 
+    normal_user: Any,
+    test_currency: Currency  
 ):
     """Test expense share calculation for multiple participants"""
     # Create another user as participant
@@ -175,6 +205,7 @@ async def test_expense_share_calculation(
         "expense_in": {
             "description": "Shared Expense",
             "amount": 100.0,
+            "currency_id": test_currency.id  
         },
         "participant_user_ids": [normal_user.id, participant_id],
     }
@@ -184,18 +215,21 @@ async def test_expense_share_calculation(
         json=expense_payload,
         headers=normal_user_token_headers,
     )
-    assert response.status_code == status.HTTP_200_OK
+    assert response.status_code == status.HTTP_201_CREATED # Corrected assertion
     data = response.json()
 
     # Verify share calculations
     assert len(data["participant_details"]) == 2
-    for participant in data["participant_details"]:
-        assert participant["share_amount"] == 50.0  # Equal split expected
+    for participant_detail in data["participant_details"]: # Renamed for clarity
+        assert participant_detail["share_amount"] == 50.0  # Equal split expected
 
 
 @pytest.mark.asyncio
 async def test_expense_update_validation(
-    client: AsyncClient, normal_user_token_headers: dict[str, str], normal_user: Any
+    client: AsyncClient, 
+    normal_user_token_headers: dict[str, str], 
+    normal_user: Any,
+    test_currency: Currency  
 ):
     """Test validation during expense updates"""
     # Create an initial expense
@@ -204,18 +238,20 @@ async def test_expense_update_validation(
     expense_data = {
         "description": initial_description,
         "amount": initial_amount,
+        "currency_id": test_currency.id,  
         "paid_by_user_id": normal_user.id,  # Ensure paid_by_user_id is part of creation
     }
     create_response = await client.post(
         "/api/v1/expenses/", json=expense_data, headers=normal_user_token_headers
     )
-    assert create_response.status_code == status.HTTP_200_OK
+    assert create_response.status_code == status.HTTP_201_CREATED
     expense_id = create_response.json()["id"]
 
     # Test update with negative amount
     update_data_neg_amount = {
         "description": initial_description,
         "amount": -50.0,
+        "currency_id": test_currency.id,  
         "paid_by_user_id": normal_user.id,
     }
     response_neg_amount = await client.put(

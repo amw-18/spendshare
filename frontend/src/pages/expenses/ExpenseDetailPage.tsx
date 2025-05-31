@@ -175,8 +175,7 @@ const ExpenseDetailPage: React.FC = () => {
           </div>
           <div className="p-4 sm:p-6 space-y-4">
             <div className="flex items-center text-white">
-              <CurrencyDollarIcon className="h-6 w-6 mr-2 text-[#7847ea]" />
-              <span className="text-2xl font-semibold">${expense.amount.toFixed(2)}</span>
+              <span className="text-2xl font-semibold">{expense.currency?.symbol || expense.currency?.code || ''}{expense.amount.toFixed(2)}</span>
             </div>
             <div className="flex items-center text-[#a393c8]">
               <CalendarDaysIcon className="h-5 w-5 mr-2 text-gray-400" />
@@ -213,7 +212,7 @@ const ExpenseDetailPage: React.FC = () => {
                         <li key={participant.user.id} className="flex justify-between items-center p-3 bg-[#100c1c] rounded-lg">
                           <span className="text-gray-300">{participant.user.username || participant.user.email}</span>
                           <span className="font-medium text-white">
-                            {participant.share_amount != null ? `$${participant.share_amount.toFixed(2)}` : 'N/A (Split pending/error)'}
+                            {participant.share_amount != null ? `${expense.currency?.symbol || expense.currency?.code || ''}${participant.share_amount.toFixed(2)}` : 'N/A (Split pending/error)'}
                           </span>
                         </li>
                       ))}

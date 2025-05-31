@@ -1,28 +1,33 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
-import { ExpensesService, type ExpenseRead } from '../generated/api';
-import { PlusCircleIcon, UserGroupIcon, DocumentTextIcon, ArrowRightIcon } from '@heroicons/react/24/outline'; // Example icons
+import { ExpensesService, type ExpenseRead } from '../generated/api'; // Assuming this is used for other parts
+import { fetchUserBalances } from '../services/BalanceService'; // Added
+import type { UserBalanceResponse, CurrencyBalance } from '../types/balanceTypes'; // Added
+import { PlusCircleIcon, UserGroupIcon, DocumentTextIcon, ArrowRightIcon, WalletIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline'; // Added WalletIcon, ExclamationTriangleIcon
 
 const DashboardPage: React.FC = () => {
   const { user } = useAuthStore();
   const hasAuthStoreHydrated = useAuthStore.persist.hasHydrated(); // Get hydration status
   const [expenses, setExpenses] = useState<ExpenseRead[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(true); // For existing expense loading
+  const [error, setError] = useState<string | null>(null); // For existing expense errors
 
-  const [totalPaidByMe, setTotalPaidByMe] = useState<number>(0);
-  const [expensesOwedToMe, setExpensesOwedToMe] = useState<ExpenseRead[]>([]); // Simplified: expenses I paid for, and others participated
-  const [expensesIOwe, setExpensesIOwe] = useState<ExpenseRead[]>([]); // Simplified: expenses others paid for, and I participated
+  // New state for balances
+  const [userBalances, setUserBalances] = useState<UserBalanceResponse | null>(null);
+  const [balancesLoading, setBalancesLoading] = useState<boolean>(true);
+  const [balancesError, setBalancesError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!hasAuthStoreHydrated) {
-      setLoading(true); // Keep loading until store is hydrated
+      setLoading(true); 
+      setBalancesLoading(true); // Keep loading until store is hydrated
       return; // Wait for hydration
     }
 
     if (user?.id) {
-      const fetchExpenses = async () => {
+      const fetchDashboardData = async () => {
+        // Fetch expenses (existing logic)
         setLoading(true);
         setError(null);
         try {
@@ -40,29 +45,8 @@ const DashboardPage: React.FC = () => {
           // or it returns all expenses accessible to the user.
           // The schema shows `user_id: number (Query)` for `read_expenses_api_v1_expenses_get`.
           // This suggests it's for filtering expenses *related* to the user.
-          const response = await ExpensesService.readExpensesEndpointApiV1ExpensesGet(undefined, 100, user.id); // skip, limit, userId
-          setExpenses(response);
-
-          // Calculate summaries
-          let paidByMe = 0;
-          const owedToMe: ExpenseRead[] = [];
-          const iOwe: ExpenseRead[] = [];
-
-          response.forEach(expense => {
-            if (expense.paid_by_user_id === user.id) {
-              paidByMe += expense.amount;
-              if (expense.participant_details && expense.participant_details.some(p => p.user_id !== user.id)) {
-                owedToMe.push(expense);
-              }
-            } else {
-              if (expense.participant_details && expense.participant_details.some(p => p.user_id === user.id)) {
-                iOwe.push(expense);
-              }
-            }
-          });
-          setTotalPaidByMe(paidByMe);
-          setExpensesOwedToMe(owedToMe);
-          setExpensesIOwe(iOwe);
+          const expenseResponse = await ExpensesService.readExpensesEndpointApiV1ExpensesGet(undefined, 100, user.id); // skip, limit, userId
+          setExpenses(expenseResponse);
 
         } catch (err: any) {
           setError(err.message || 'Failed to fetch expenses.');
@@ -72,13 +56,28 @@ const DashboardPage: React.FC = () => {
         } finally {
           setLoading(false);
         }
-      };
-      fetchExpenses();
-    }
-  }, [user, hasAuthStoreHydrated]); // Add hasAuthStoreHydrated to dependencies
 
-  if (loading && (!user || !hasAuthStoreHydrated)) { // Adjust loading condition
-    return <div className="text-center py-10 text-[#a393c8]">Loading user data...</div>;
+        // Fetch balances
+        setBalancesLoading(true);
+        setBalancesError(null);
+        try {
+          const balanceData = await fetchUserBalances();
+          setUserBalances(balanceData);
+        } catch (err: any) {
+          setBalancesError(err.message || 'Failed to fetch balances.');
+        } finally {
+          setBalancesLoading(false);
+        }
+      };
+      fetchDashboardData();
+    }
+  }, [user, hasAuthStoreHydrated]);
+
+  // Combined loading state for initial page load
+  const initialLoading = (loading || balancesLoading) && (!user || !hasAuthStoreHydrated);
+
+  if (initialLoading) {
+    return <div className="text-center py-10 text-[#a393c8]">Loading dashboard data...</div>;
   }
 
   if (!user) { // Should be caught by ProtectedRoute, but as a safeguard
@@ -89,12 +88,13 @@ const DashboardPage: React.FC = () => {
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8 space-y-8">
-      <header className="mb-8">
+      <header className="mb-8 text-center">
         <h1 className="text-3xl font-bold text-white">Welcome back, {user.username || user.email}!</h1>
         <p className="text-[#a393c8]">Here's your financial overview.</p>
       </header>
 
       {/* Summary Balances */}
+      {/*
       <section>
         <h2 className="text-xl font-semibold text-[#e0def4] mb-4">Your Balances</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -105,18 +105,14 @@ const DashboardPage: React.FC = () => {
           </div>
           <div className="bg-[#1c162c] p-6 rounded-xl shadow-xl border border-solid border-[#2f2447]">
             <h3 className="text-lg font-medium text-[#e0def4]">Total You Are Owed (Simplified)</h3>
-            {/* This is a very simplified view. True amount owed requires summing up shares. */}
             <p className="text-3xl font-semibold text-green-400 mt-2">
-              {/* Sum of amounts of expenses where user paid and others participated */}
               ${expensesOwedToMe.reduce((sum, exp) => sum + exp.amount, 0).toFixed(2)}
             </p>
             <p className="text-sm text-[#a393c8] mt-1">From {expensesOwedToMe.length} expenses you paid for</p>
           </div>
           <div className="bg-[#1c162c] p-6 rounded-xl shadow-xl border border-solid border-[#2f2447]">
             <h3 className="text-lg font-medium text-[#e0def4]">Total You Owe (Simplified)</h3>
-            {/* This is a very simplified view. True amount user owes requires summing up their shares. */}
             <p className="text-3xl font-semibold text-red-400 mt-2">
-              {/* Sum of amounts of expenses where user participated and others paid */}
               ${expensesIOwe.reduce((sum, exp) => sum + exp.amount, 0).toFixed(2)}
             </p>
             <p className="text-sm text-[#a393c8] mt-1">Across {expensesIOwe.length} expenses others paid for</p>
@@ -127,11 +123,51 @@ const DashboardPage: React.FC = () => {
           The above "Total You Are Owed" and "Total You Owe" are based on full expense amounts where you are involved, not your specific shares.
         </p>
       </section>
+      */}
+      
+      {/* Per-Currency Balances Section */}
+      <section>
+        <h2 className="text-xl font-semibold text-[#e0def4] mb-4 flex items-center justify-center">
+          <WalletIcon className="h-6 w-6 mr-2 text-[#7847ea]" />
+          Your Balances by Currency
+        </h2>
+        {balancesLoading && <p className="text-[#a393c8] text-center">Loading balances...</p>}
+        {balancesError && (
+          <div className="bg-red-900/30 p-4 rounded-lg border border-red-700/50 text-red-300 flex items-center">
+            <ExclamationTriangleIcon className="h-5 w-5 mr-2" />
+            <p>{balancesError}</p>
+          </div>
+        )}
+        {!balancesLoading && !balancesError && userBalances && (
+          <>
+            {userBalances.balances && userBalances.balances.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {userBalances.balances.map((cb: CurrencyBalance) => (
+                  <div key={cb.currency.id} className="bg-[#1c162c] p-6 rounded-xl shadow-xl border border-solid border-[#2f2447]">
+                    <h3 className="text-lg font-medium text-[#e0def4]">{cb.currency.name} ({cb.currency.code})</h3>
+                    <p className="text-md text-[#a393c8] mt-3">
+                      Total Paid: <span className="font-semibold text-white">{cb.currency?.symbol || ''}{(cb.total_paid ?? 0).toFixed(2)}{!cb.currency?.symbol && cb.currency?.code ? ` ${cb.currency.code}` : ''}</span>
+                    </p>
+                    <p className="text-md text-green-400 mt-1">
+                      You are Owed: <span className="font-semibold">{cb.currency?.symbol || ''}{(cb.net_owed_to_user ?? 0).toFixed(2)}{!cb.currency?.symbol && cb.currency?.code ? ` ${cb.currency.code}` : ''}</span>
+                    </p>
+                    <p className="text-md text-red-400 mt-1">
+                      You Owe: <span className="font-semibold">{cb.currency?.symbol || ''}{(cb.net_user_owes ?? 0).toFixed(2)}{!cb.currency?.symbol && cb.currency?.code ? ` ${cb.currency.code}` : ''}</span>
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[#a393c8] italic text-center">No currency balances found.</p>
+            )}
+          </>
+        )}
+      </section>
 
       {/* Quick Links/Actions */}
       <section>
-        <h2 className="text-xl font-semibold text-[#e0def4] mb-4">Quick Actions</h2>
-        <div className="flex space-x-4">
+        <h2 className="text-xl font-semibold text-[#e0def4] mb-4 text-center">Quick Actions</h2>
+        <div className="flex justify-center space-x-4">
           <Link
             to="/expenses/new"
             className="flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-lg text-white bg-[#7847ea] hover:bg-[#6c3ddb] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#161122] focus:ring-[#7847ea] h-11"
@@ -149,14 +185,14 @@ const DashboardPage: React.FC = () => {
 
       {/* Recent Activity */}
       <section>
-        <h2 className="text-xl font-semibold text-[#e0def4] mb-4">Recent Activity</h2>
-        {loading && <p className="text-[#a393c8]">Loading recent activity...</p>}
-        {error && <p className="text-red-400 bg-red-900/30 p-3 rounded-lg border border-red-700/50">{error}</p>}
-        {!loading && !error && expenses.length === 0 && <p className="text-[#a393c8]">No expenses recorded yet.</p>}
+        <h2 className="text-xl font-semibold text-[#e0def4] mb-4 text-center">Recent Activity</h2>
+        {loading && <p className="text-[#a393c8] text-center">Loading recent activity...</p>}
+        {error && <p className="text-red-400 bg-red-900/30 p-3 rounded-lg border border-red-700/50 text-center">{error}</p>}
+        {!loading && !error && expenses.length === 0 && <p className="text-[#a393c8] text-center">No expenses recorded yet.</p>}
         {!loading && !error && expenses.length > 0 && (
           <div className="bg-[#1c162c] shadow-xl overflow-hidden sm:rounded-xl border border-solid border-[#2f2447]">
             <ul role="list" className="divide-y divide-[#2f2447]">
-              {recentExpenses.map((expense) => {
+              {recentExpenses.map((expense: ExpenseRead) => {
                 const payerParticipant = expense.participant_details?.find(p => p.user_id === expense.paid_by_user_id);
                 const payerName = payerParticipant ? payerParticipant.user.username : 'N/A';
 
@@ -166,7 +202,7 @@ const DashboardPage: React.FC = () => {
                       <div className="px-4 py-4 sm:px-6">
                         <div className="flex items-center justify-between">
                           <p className="text-sm font-medium text-[#7847ea] truncate">{expense.description}</p>
-                          <p className="ml-2 text-sm text-[#a393c8]">${expense.amount.toFixed(2)}</p>
+                          <p className="ml-2 text-sm text-[#a393c8]">{expense.currency?.symbol || ''}{expense.amount.toFixed(2)}{!expense.currency?.symbol && expense.currency?.code ? ` ${expense.currency.code}` : ''}</p>
                         </div>
                         <div className="mt-2 sm:flex sm:justify-between">
                           <div className="sm:flex">

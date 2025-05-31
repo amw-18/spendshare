@@ -12,7 +12,6 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import select, or_  # Added or_
 
 from src.db.database import get_session
-from src.models import models  # Used as models.User in type hints
 from src.models import schemas
 from src.core.security import (
     get_password_hash,
@@ -34,7 +33,7 @@ async def create_user_endpoint(
     *,
     session: AsyncSession = Depends(get_session),
     user_in: schemas.UserCreate,
-) -> models.User:
+) -> User:
     db_user_by_email = await get_optional_object_by_attribute(
         session, User, "email", user_in.email
     )
@@ -72,14 +71,7 @@ async def read_users_endpoint(
     session: AsyncSession = Depends(get_session),
     skip: int = 0,
     limit: int = 100,
-    current_user: models.User = Depends(get_current_user),
-) -> List[models.User]:
-    if not current_user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to list users",
-        )
-    # Logic from crud_user.get_users
+) -> List[User]:
     statement = select(User).offset(skip).limit(limit)
     result = await session.exec(statement)
     users = list(result)
@@ -91,8 +83,8 @@ async def search_users_endpoint(
     *,
     query: str,  # Search query for username or email
     session: AsyncSession = Depends(get_session),
-    current_user: models.User = Depends(get_current_user),  # Ensure user is authenticated
-) -> List[models.User]:
+    current_user: User = Depends(get_current_user),  # Ensure user is authenticated
+) -> List[User]:
     """
     Search for users by username or email.
     Returns a list of users matching the query.
@@ -114,8 +106,8 @@ async def search_users_endpoint(
 
 @router.get("/me", response_model=schemas.UserRead)
 async def read_current_user_me_endpoint(
-    current_user: models.User = Depends(get_current_user),
-) -> models.User:
+    current_user: User = Depends(get_current_user),
+) -> User:
     """
     Get current logged-in user.
     """
@@ -127,8 +119,8 @@ async def read_user_endpoint(
     *,
     session: AsyncSession = Depends(get_session),
     user_id: int,
-    current_user: models.User = Depends(get_current_user),
-) -> models.User:
+    current_user: User = Depends(get_current_user),
+) -> User:
     db_user = await get_object_or_404(session, User, user_id)
     return db_user
 
@@ -139,8 +131,8 @@ async def update_user_endpoint(
     session: AsyncSession = Depends(get_session),
     user_id: int,
     user_in: schemas.UserUpdate,
-    current_user: models.User = Depends(get_current_user),
-) -> models.User:
+    current_user: User = Depends(get_current_user),
+) -> User:
     db_user = await get_object_or_404(
         session, User, user_id
     )  # This is the user to be updated
@@ -228,7 +220,7 @@ async def delete_user_endpoint(
     *,
     session: AsyncSession = Depends(get_session),
     user_id: int,
-    current_user: models.User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ) -> int:
     db_user = await get_object_or_404(
         session, User, user_id
@@ -265,30 +257,5 @@ async def login_for_access_token(
     # Create access token
     access_token = create_access_token(
         data={"sub": user.username, "user_id": user.id}  # Add user_id to token payload
-    )
-    return {"access_token": access_token, "token_type": "bearer"}
-
-
-@router.post("/admin/login_as/{target_user_id}", response_model=schemas.Token)
-async def admin_login_as_user(
-    target_user_id: int,
-    current_user: models.User = Depends(
-        get_current_user
-    ),  # Ensures this endpoint is protected
-    session: AsyncSession = Depends(get_session),
-):
-    if not current_user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized for this action",
-        )
-
-    target_user = await get_object_or_404(session, User, target_user_id)
-
-    # Create access token for the target user
-    # Ensure the payload matches what get_current_user expects, e.g., 'sub' for username
-    # and potentially 'user_id'.
-    access_token = create_access_token(
-        data={"sub": target_user.username, "user_id": target_user.id}
     )
     return {"access_token": access_token, "token_type": "bearer"}

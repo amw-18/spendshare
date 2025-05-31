@@ -2,10 +2,9 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type UserRead = {
-    username: string;
-    email: string;
-    id: number;
-    is_admin: boolean;
+export type ConversionRateCreate = {
+    from_currency_id: number;
+    to_currency_id: number;
+    rate: number;
 };
 
