@@ -10,13 +10,14 @@ from src.config import settings
 # Note: The connect_args={"check_same_thread": False} is specific to SQLite's default driver
 # and is not needed or used by aiosqlite in the same way. aiosqlite handles concurrency properly.
 
-async_engine = create_async_engine(settings.DATABASE_URL, echo=settings.DATABASE_ECHO, future=True)
+async_engine = create_async_engine(
+    settings.DATABASE_URL, echo=settings.DATABASE_ECHO, future=True
+)
 # `future=True` enables the newer SQLAlchemy 2.0 style execution model which is preferred.
 
 
 async def create_db_and_tables():
     async with async_engine.begin() as conn:
-        # await conn.run_sync(SQLModel.metadata.drop_all) # Optional: drop tables first
         await conn.run_sync(SQLModel.metadata.create_all)
 
 

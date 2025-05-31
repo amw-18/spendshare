@@ -2,7 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
-from src.models import models, schemas
+from src.models.models import Currency, User, Expense, ExpenseParticipant
 from src.main import app  # To get TestClient(app)
 
 # Assuming conftest.py provides these fixtures:
@@ -29,7 +29,7 @@ def test_create_currency_admin(test_client: TestClient, admin_auth_headers: dict
     assert "id" in data
 
     # Verify in DB
-    currency_in_db = db_session.get(models.Currency, data["id"])
+    currency_in_db = db_session.get(Currency, data["id"])
     assert currency_in_db is not None
     assert currency_in_db.code == "USD"
 
@@ -108,7 +108,7 @@ def test_update_currency_admin(test_client: TestClient, admin_auth_headers: dict
     assert data["code"] == "CHF" # Code should not change unless specified
 
     # Verify in DB
-    currency_in_db = db_session.get(models.Currency, currency_id)
+    currency_in_db = db_session.get(Currency, currency_id)
     assert currency_in_db.name == "Swiss Franc Updated"
 
 
@@ -124,7 +124,7 @@ def test_update_currency_admin_change_code(test_client: TestClient, admin_auth_h
     assert data["code"] == "NZZ"
 
     # Verify in DB
-    currency_in_db = db_session.get(models.Currency, currency_id)
+    currency_in_db = db_session.get(Currency, currency_id)
     assert currency_in_db.code == "NZZ"
 
 
@@ -168,7 +168,7 @@ def test_delete_currency_admin_unused(test_client: TestClient, admin_auth_header
     assert response_delete.json()["message"] == "Currency deleted"
 
     # Verify in DB
-    currency_in_db = db_session.get(models.Currency, currency_id)
+    currency_in_db = db_session.get(Currency, currency_id)
     assert currency_in_db is None
 
 
@@ -190,7 +190,7 @@ def test_delete_currency_admin_used(
     test_client: TestClient, 
     admin_auth_headers: dict, 
     db_session: Session,
-    test_user_admin: models.User # To be the payer
+    test_user_admin: User # To be the payer
 ):
     # 1. Create a currency
     currency_data = {"code": "TST", "name": "Test Currency", "symbol": "T"}
@@ -221,7 +221,7 @@ def test_delete_currency_admin_used(
     assert "associated with existing expenses" in response_delete.json()["detail"]
 
     # Verify currency still exists in DB
-    currency_in_db = db_session.get(models.Currency, currency_id)
+    currency_in_db = db_session.get(Currency, currency_id)
     assert currency_in_db is not None
     assert currency_in_db.code == "TST"
 
@@ -237,19 +237,9 @@ def test_delete_currency_admin_used(
     
     # Example cleanup (highly dependent on expense deletion logic):
     # First remove participants if any (assuming ExpenseParticipant exists and links)
-    db_session.exec(select(models.ExpenseParticipant).where(models.ExpenseParticipant.expense_id == expense_id))
+    db_session.exec(select(ExpenseParticipant).where(ExpenseParticipant.expense_id == expense_id))
     # Then delete expense
-    expense_to_delete = db_session.get(models.Expense, expense_id)
+    expense_to_delete = db_session.get(Expense, expense_id)
     if expense_to_delete:
         db_session.delete(expense_to_delete)
         db_session.commit()
-
-```
-
-**Note on `test_delete_currency_admin_used`:**
-*   I've assumed the expense creation endpoint is `/api/v1/expenses/`. This might need adjustment based on your actual expense router prefix.
-*   The cleanup of the created expense is commented with considerations. If your test setup uses transactions that roll back after each test, manual cleanup might not be needed. Otherwise, it's good practice. For now, I've added a basic SQLAlchemy cleanup.
-*   The `test_user_admin` fixture is used to ensure the `paid_by_user_id` for the expense is valid.
-
-This creates the `test_currencies.py` file with the specified tests.
-Next, I'll move on to updating `app/tests/test_expenses.py`. I'll start by reading its content.

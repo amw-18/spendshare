@@ -8,7 +8,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.db.database import get_session
-from src.models import models
+from src.models.models import User
 
 # Initialize a password context (using bcrypt as the scheme)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -44,7 +44,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme), session: AsyncSession = Depends(get_session)
-) -> models.User:
+) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -56,7 +56,7 @@ async def get_current_user(
         user_id: int | None = payload.get("user_id")
         if username is None or user_id is None:
             raise credentials_exception
-        user = await session.get(models.User, user_id)
+        user = await session.get(User, user_id)
         if user is None or user.username != username:
             raise credentials_exception
         return user
