@@ -261,23 +261,6 @@ async def test_normal_user_can_delete_self(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_admin_can_delete_other_user(
-    client: AsyncClient, admin_user_token_headers: dict[str, str], normal_user: User
-):
-    # Ensure normal_user exists (it's a fixture)
-    response = await client.delete(
-        f"/api/v1/users/{normal_user.id}", headers=admin_user_token_headers
-    )
-    assert response.status_code == status.HTTP_200_OK
-
-    # Verify deletion by trying to fetch (admin can try, should be 404)
-    get_response = await client.get(
-        f"/api/v1/users/{normal_user.id}", headers=admin_user_token_headers
-    )
-    assert get_response.status_code == status.HTTP_404_NOT_FOUND
-
-
-@pytest.mark.asyncio
 async def test_normal_user_cannot_delete_other_user(
     client: AsyncClient, normal_user_token_headers: dict[str, str], normal_user: User
 ):

@@ -78,17 +78,19 @@ async def read_group_endpoint(
 ) -> Group:
     db_group = await get_object_or_404(session, Group, group_id)
 
-    if db_group.created_by_user_id != current_user.id:
-        # Check if current_user is a member of the group
-        link_exists_statement = select(UserGroupLink).where(
-            UserGroupLink.group_id == group_id, UserGroupLink.user_id == current_user.id
-        )
-        result = await session.exec(link_exists_statement)
-        if not result.first():
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not authorized to view this group",
+    # If the current user is not an admin, then check for ownership or membership
+    if not current_user.is_admin:
+        if db_group.created_by_user_id != current_user.id:
+            # Check if current_user is a member of the group
+            link_exists_statement = select(UserGroupLink).where(
+                UserGroupLink.group_id == group_id, UserGroupLink.user_id == current_user.id
             )
+            result = await session.exec(link_exists_statement)
+            if not result.first():
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Not authorized to view this group",
+                )
     return db_group
 
 
@@ -132,7 +134,8 @@ async def delete_group_endpoint(
     current_user: User = Depends(get_current_user),
 ) -> int:
     db_group = await get_object_or_404(session, Group, group_id)
-    if db_group.created_by_user_id != current_user.id:
+    # Authorization: Only group creator or admin can delete
+    if db_group.created_by_user_id != current_user.id and not current_user.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to delete this group",
@@ -158,7 +161,7 @@ async def add_group_member_endpoint(
     await get_object_or_404(session, User, user_id)
 
     # Authorization: Only group creator or admin can add members
-    if db_group.created_by_user_id != current_user.id:
+    if db_group.created_by_user_id != current_user.id and not current_user.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to add members to this group",

@@ -109,6 +109,7 @@ async def delete_currency(
         )
 
     db_currency = await get_object_or_404(session, Currency, currency_id)
+    await session.refresh(db_currency, attribute_names=["expenses"])  # Explicitly load expenses
     if len(db_currency.expenses) > 0:  # Check if any expense is using this currency
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

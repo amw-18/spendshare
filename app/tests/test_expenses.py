@@ -1,10 +1,11 @@
 import pytest
+import pytest_asyncio # Added for async fixture
 from httpx import AsyncClient
 from fastapi import status
 from typing import Dict, Any, AsyncGenerator
 from src.models.models import User, Currency # Added Currency
 from src.main import app # For TestClient, if not using AsyncClient directly for all
-from fastapi.testclient import TestClient # For synchronous currency creation in fixture
+# from fastapi.testclient import TestClient # No longer needed for test_currency_sync
 
 
 # Helper function to create a user (can be moved to conftest if used by many test files)
@@ -30,8 +31,8 @@ async def create_test_group(
     return response.json()
 
 
-@pytest.fixture(scope="module")
-def test_currency_sync(admin_auth_headers: dict) -> Currency:
+@pytest_asyncio.fixture
+async def test_currency_sync(client: AsyncClient, admin_user_token_headers: dict) -> Currency:
     """
     Creates a test currency ("TST") using admin privileges.
     Uses TestClient for synchronous execution suitable for a module-scoped fixture.
@@ -40,14 +41,13 @@ def test_currency_sync(admin_auth_headers: dict) -> Currency:
     # and other async fixtures depend on event_loop.
     # Alternatively, make this an async fixture if that's simpler.
     # For now, let's use TestClient from main app.
-    client = TestClient(app) 
     currency_data = {"code": "TST", "name": "Test Currency", "symbol": "T"}
-    response = client.post("/api/v1/currencies/", headers=admin_auth_headers, json=currency_data)
+    response = await client.post("/api/v1/currencies/", headers=admin_user_token_headers, json=currency_data)
     if response.status_code == 400 and "already exists" in response.json().get("detail", ""):
         # If currency already exists from a previous partial run, try to fetch it
         # This is a workaround for potential issues if tests are interrupted.
         # A better solution might be to ensure DB cleanup or use unique codes per test run.
-        existing_currencies_resp = client.get("/api/v1/currencies/?limit=100") # Assuming default limit is enough
+        existing_currencies_resp = await client.get("/api/v1/currencies/?limit=100") # Assuming default limit is enough
         existing_currencies = existing_currencies_resp.json()
         found = next((c for c in existing_currencies if c["code"] == "TST"), None)
         if found:
@@ -74,7 +74,7 @@ async def test_create_expense_with_currency_auth(
     response = await client.post(
         "/api/v1/expenses/", json=expense_data, headers=normal_user_token_headers
     )
-    assert response.status_code == status.HTTP_200_OK, f"Failed to create expense: {response.text}"
+    assert response.status_code == status.HTTP_201_CREATED, f"Failed to create expense: {response.text}"
     data = response.json()
     assert data["description"] == expense_data["description"]
     assert data["amount"] == expense_data["amount"]
@@ -158,7 +158,7 @@ async def test_read_expense_authorization(
         json=expense_payload,
         headers=normal_user_token_headers,
     )
-    assert response_create_exp.status_code == status.HTTP_200_OK
+    assert response_create_exp.status_code == status.HTTP_201_CREATED # Changed from 200 OK
     created_expense = response_create_exp.json()
     expense_id = created_expense["id"]
 
@@ -232,7 +232,7 @@ async def test_delete_expense_authorization(
         json=expense_data_payer_del,
         headers=normal_user_token_headers,
     )
-    assert response_create_payer_del.status_code == status.HTTP_200_OK
+    assert response_create_payer_del.status_code == status.HTTP_201_CREATED # Changed from 200 OK
     expense_id_payer_del = response_create_payer_del.json()["id"]
 
     response_payer_delete = await client.delete(
@@ -256,7 +256,7 @@ async def test_delete_expense_authorization(
         json=expense_data_admin_del,
         headers=normal_user_token_headers,
     )  # normal_user creates
-    assert response_create_admin_del.status_code == status.HTTP_200_OK
+    assert response_create_admin_del.status_code == status.HTTP_201_CREATED # Changed from 200 OK
     expense_id_admin_del = response_create_admin_del.json()["id"]
 
     response_admin_delete = await client.delete(
@@ -280,7 +280,7 @@ async def test_delete_expense_authorization(
         json=expense_data_other_del,
         headers=normal_user_token_headers,
     )  # normal_user creates
-    assert response_create_other_del.status_code == status.HTTP_200_OK
+    assert response_create_other_del.status_code == status.HTTP_201_CREATED # Changed from 200 OK
     expense_id_other_del = response_create_other_del.json()["id"]
 
     response_other_delete = await client.delete(
@@ -323,7 +323,7 @@ async def test_create_service_expense_success_auth(
         json=service_expense_payload,
         headers=normal_user_token_headers,
     )
-    assert response.status_code == status.HTTP_200_OK, f"Failed to create service expense: {response.text}"
+    assert response.status_code == status.HTTP_201_CREATED, f"Failed to create service expense: {response.text}"
     data = response.json()
     assert data["description"] == service_expense_payload["expense_in"]["description"]
     assert data["id"] is not None
@@ -369,15 +369,14 @@ async def test_update_expense_success_auth(
     normal_user_token_headers: dict[str, str], 
     normal_user: User,
     test_currency_sync: Currency, # Original currency
-    admin_auth_headers: dict # To create a second currency for update
+    admin_user_token_headers: dict # To create a second currency for update
 ):
     # Create another currency for updating to
-    client_sync = TestClient(app) # Sync client for fixture-like setup
     new_currency_data = {"code": "UCU", "name": "Update Test Currency", "symbol": "U"}
-    res_new_curr = client_sync.post("/api/v1/currencies/", headers=admin_auth_headers, json=new_currency_data)
+    res_new_curr = await client.post("/api/v1/currencies/", headers=admin_user_token_headers, json=new_currency_data)
     # Handle if UCU already exists (e.g. from a previous failed run)
     if res_new_curr.status_code == 400 and "already exists" in res_new_curr.json().get("detail", ""):
-        existing_currencies_resp = client_sync.get("/api/v1/currencies/?limit=100")
+        existing_currencies_resp = await client.get("/api/v1/currencies/?limit=100")
         existing_currencies = existing_currencies_resp.json()
         found_ucu = next((c for c in existing_currencies if c["code"] == "UCU"), None)
         if found_ucu:
@@ -397,7 +396,7 @@ async def test_update_expense_success_auth(
     create_resp = await client.post(
         "/api/v1/expenses/", json=expense_data, headers=normal_user_token_headers
     )
-    assert create_resp.status_code == status.HTTP_200_OK
+    assert create_resp.status_code == status.HTTP_201_CREATED # Changed from 200 OK
     expense_id = create_resp.json()["id"]
 
     update_payload = {
@@ -435,7 +434,7 @@ async def test_update_expense_invalid_currency_id(
     create_resp = await client.post(
         "/api/v1/expenses/", json=expense_data, headers=normal_user_token_headers
     )
-    assert create_resp.status_code == status.HTTP_200_OK
+    assert create_resp.status_code == status.HTTP_201_CREATED # Changed from 200 OK
     expense_id = create_resp.json()["id"]
 
     update_payload = {"currency_id": 88888} # Invalid currency ID
