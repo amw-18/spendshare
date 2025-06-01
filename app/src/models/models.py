@@ -47,6 +47,11 @@ class ExpenseParticipant(SQLModel, table=True):
         back_populates="settled_expense_participations"
     )
 
+    # Relationship to User
+    user: "User" = Relationship(back_populates="participant_records")
+    # Relationship to Expense
+    expense: "Expense" = Relationship(back_populates="all_participant_details")
+
 
 class User(SQLModel, table=True):
     __table_args__ = {"extend_existing": True}
@@ -68,7 +73,7 @@ class User(SQLModel, table=True):
     expenses_participated_in: List["Expense"] = Relationship(
         back_populates="participants",
         link_model=ExpenseParticipant,
-        sa_relationship_kwargs={"cascade": "all, delete"},
+        sa_relationship_kwargs={"cascade": "all, delete", "overlaps": "user,expense"},
     )
     groups_created: List["Group"] = Relationship(
         back_populates="created_by",
@@ -77,6 +82,12 @@ class User(SQLModel, table=True):
     transactions_created: List["Transaction"] = Relationship(
         back_populates="created_by",
         sa_relationship_kwargs={"cascade": "all, delete-orphan"}, # if user is deleted, their transactions are deleted
+    )
+
+    # Link to the actual ExpenseParticipant entries for this user
+    participant_records: List["ExpenseParticipant"] = Relationship(
+        back_populates="user",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan", "overlaps": "expenses_participated_in"}
     )
 
 
@@ -131,7 +142,13 @@ class Expense(SQLModel, table=True):
     participants: List["User"] = Relationship(
         back_populates="expenses_participated_in",
         link_model=ExpenseParticipant,
-        sa_relationship_kwargs={"cascade": "all, delete"},
+        sa_relationship_kwargs={"cascade": "all, delete", "overlaps": "expense,participant_records,user"},
+    )
+
+    # Relationship to the ExpenseParticipant link table records for this expense
+    all_participant_details: List["ExpenseParticipant"] = Relationship(
+        back_populates="expense",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan", "overlaps": "expenses_participated_in,participants"}
     )
 
 

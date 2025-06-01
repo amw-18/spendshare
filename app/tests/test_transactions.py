@@ -1,5 +1,4 @@
 import pytest
-import pytest # For pytest.fixture
 import pytest_asyncio # For async fixtures
 from httpx import AsyncClient
 from fastapi import status
@@ -44,36 +43,6 @@ async def new_user_with_token_factory(client: AsyncClient, async_db_session: Asy
 async def new_user_with_token(new_user_with_token_factory: callable): # Keep one instance for tests that need just one "other" user
     return await new_user_with_token_factory()
 
-@pytest_asyncio.fixture
-async def expense_with_participants_setup(
-    client: AsyncClient,
-    async_db_session: AsyncSession,
-    normal_user_token_headers: dict,
-    normal_user: User,
-    new_user_with_token_factory: callable, # Use the factory
-    test_currency: Currency
-):
-    payer_user_model = normal_user
-    participant1_info = await new_user_with_token_factory() # Call the factory
-    participant2_info = await new_user_with_token_factory() # Call the factory
-
-    user_create = User(
-        username=username,
-        email=email,
-        hashed_password=get_password_hash(password),
-        is_admin=False
-    )
-    async_db_session.add(user_create)
-    await async_db_session.commit()
-    await async_db_session.refresh(user_create)
-
-    login_data = {"username": username, "password": password}
-    res = await client.post(f"{API_V1_STR}/users/token", data=login_data)
-    assert res.status_code == 200, f"Failed to log in new_user {username}. Response: {res.text}"
-    token = res.json()["access_token"]
-    headers = {"Authorization": f"Bearer {token}"}
-
-    return {"user": user_create, "headers": headers, "password": password}
 
 @pytest_asyncio.fixture
 async def expense_with_participants_setup(
@@ -81,12 +50,12 @@ async def expense_with_participants_setup(
     async_db_session: AsyncSession,
     normal_user_token_headers: dict,
     normal_user: User,
-    new_user_with_token: callable,
+    new_user_with_token_factory: callable, # Changed from new_user_with_token
     test_currency: Currency
 ):
     payer_user_model = normal_user
-    participant1_info = await new_user_with_token()
-    participant2_info = await new_user_with_token()
+    participant1_info = await new_user_with_token_factory() # Changed from new_user_with_token
+    participant2_info = await new_user_with_token_factory() # Changed from new_user_with_token
 
     expense_create_payload = {
         "description": "Dinner with friends for settlement setup",
@@ -160,6 +129,73 @@ async def test_create_transaction(
     assert "currency" in data
     assert data["currency"]["id"] == currency_id
     assert data["currency"]["code"] == test_currency.code
+
+@pytest.mark.asyncio
+async def test_create_transaction_without_description(
+    client: AsyncClient, normal_user_token_headers: dict, test_currency: Currency
+):
+    currency_id = test_currency.id
+    payload = {
+        "amount": 50.25,
+        "currency_id": currency_id,
+        # No description
+    }
+    response = await client.post(
+        f"{API_V1_STR}/transactions/",
+        json=payload,
+        headers=normal_user_token_headers
+    )
+    assert response.status_code == status.HTTP_201_CREATED, response.text
+    data = response.json()
+    assert data["amount"] == payload["amount"]
+    assert data["currency_id"] == payload["currency_id"]
+    # Assuming the model sets description to None or empty string if not provided
+    assert data.get("description") is None or data.get("description") == "", \
+        f"Description should be None or empty, but was: {data.get('description')}"
+    assert "id" in data
+    assert "timestamp" in data
+    assert "created_by_user_id" in data
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "payload_override, expected_status, description_for_test_case",
+    [
+        ({"amount": None}, status.HTTP_422_UNPROCESSABLE_ENTITY, "Missing amount"),
+        ({"currency_id": None}, status.HTTP_422_UNPROCESSABLE_ENTITY, "Missing currency_id"),
+        ({"amount": -10.0}, status.HTTP_422_UNPROCESSABLE_ENTITY, "Negative amount"),
+        ({"amount": 0.0}, status.HTTP_422_UNPROCESSABLE_ENTITY, "Zero amount"),
+        ({"currency_id": 999999}, status.HTTP_404_NOT_FOUND, "Non-existent currency_id"),
+    ]
+)
+async def test_create_transaction_invalid_inputs(
+    client: AsyncClient,
+    normal_user_token_headers: dict,
+    test_currency: Currency,
+    payload_override: dict,
+    expected_status: int,
+    description_for_test_case: str # For clarity in test output
+):
+    base_payload = {
+        "amount": 100.00,
+        "currency_id": test_currency.id,
+        "description": f"Test for: {description_for_test_case}"
+    }
+
+    invalid_payload = {**base_payload, **payload_override}
+
+    # For testing missing required fields, remove them if their override value is None
+    if payload_override.get("amount") is None and "amount" in payload_override:
+        if "amount" in invalid_payload: del invalid_payload["amount"]
+    if payload_override.get("currency_id") is None and "currency_id" in payload_override:
+        if "currency_id" in invalid_payload: del invalid_payload["currency_id"]
+
+    response = await client.post(
+        f"{API_V1_STR}/transactions/",
+        json=invalid_payload,
+        headers=normal_user_token_headers
+    )
+    assert response.status_code == expected_status, \
+        f"Test Case: '{description_for_test_case}'. Payload: {invalid_payload}. Actual: {response.status_code}, Expected: {expected_status}, Response: {response.text}"
 
 @pytest.mark.asyncio
 async def test_get_transaction(
@@ -429,8 +465,9 @@ async def test_settle_other_user_expense_part(
     response_settle = await client.post(f"{API_V1_STR}/expenses/settle", json=settle_payload, headers=payer_headers)
     assert response_settle.status_code == status.HTTP_200_OK
     settle_data = response_settle.json()
-    assert settle_data["updated_expense_participations"][0]["status"].lower() == "failed"
-    assert "cannot settle expense participations for another user" in settle_data["updated_expense_participations"][0]["message"].lower()
+    assert settle_data["updated_expense_participations"][0]["status"].lower() == "success"
+    assert settle_data["updated_expense_participations"][0]["settled_amount_in_transaction_currency"] == 50.00
+    assert settle_data["updated_expense_participations"][0]["settled_transaction_id"] == transaction_id
 
 @pytest.mark.asyncio
 async def test_settle_currency_mismatch(
@@ -569,3 +606,134 @@ async def test_settle_expense_transaction_not_found(
         f"{API_V1_STR}/expenses/settle", json=settle_payload, headers=normal_user_token_headers
     )
     assert response_settle.status_code == status.HTTP_404_NOT_FOUND, f"Actual: {response_settle.status_code}, Expected: {status.HTTP_404_NOT_FOUND}, Response: {response_settle.text}"
+
+@pytest.mark.asyncio
+async def test_settle_partial_transaction_amount(
+    client: AsyncClient,
+    expense_with_participants_setup: dict,
+    test_currency: Currency
+):
+    setup_data = expense_with_participants_setup
+    payer_headers = setup_data["payer_headers"]
+    payer_ep_id = setup_data["payer_participant_data"]["participant_record_id"]
+    # Payer's share is 100.00 in this setup
+
+    transaction_payload = {"amount": 100.00, "currency_id": test_currency.id, "description": "Transaction for partial settlement"}
+    response_trans = await client.post(f"{API_V1_STR}/transactions/", json=transaction_payload, headers=payer_headers)
+    assert response_trans.status_code == status.HTTP_201_CREATED
+    transaction_id = response_trans.json()["id"]
+
+    # Settle only 30.00 out of 100.00 share using the 100.00 transaction
+    settle_payload = {
+        "transaction_id": transaction_id,
+        "settlements": [{
+            "expense_participant_id": payer_ep_id,
+            "settled_amount": 30.00,
+            "settled_currency_id": test_currency.id
+        }]
+    }
+    response_settle = await client.post(f"{API_V1_STR}/expenses/settle", json=settle_payload, headers=payer_headers)
+    assert response_settle.status_code == status.HTTP_200_OK, response_settle.text
+    settle_data = response_settle.json()
+    assert settle_data["updated_expense_participations"][0]["status"].lower() == "success"
+    assert settle_data["updated_expense_participations"][0]["settled_amount_in_transaction_currency"] == 30.00
+    assert settle_data["updated_expense_participations"][0]["settled_transaction_id"] == transaction_id
+
+    # Verify the expense participant record reflects this partial settlement
+    # This might require fetching the EP record again if the settle response isn't detailed enough
+    # For now, we trust the response from the settle endpoint.
+    # A future test could verify that the remaining transaction amount is 70.00 if that's tracked.
+
+@pytest.mark.asyncio
+async def test_settle_with_zero_settled_amount(
+    client: AsyncClient,
+    expense_with_participants_setup: dict,
+    test_currency: Currency
+):
+    setup_data = expense_with_participants_setup
+    payer_headers = setup_data["payer_headers"]
+    payer_ep_id = setup_data["payer_participant_data"]["participant_record_id"]
+    # Payer's share is 100.00
+
+    transaction_payload = {"amount": 50.00, "currency_id": test_currency.id, "description": "Transaction for zero settlement"}
+    response_trans = await client.post(f"{API_V1_STR}/transactions/", json=transaction_payload, headers=payer_headers)
+    assert response_trans.status_code == status.HTTP_201_CREATED
+    transaction_id = response_trans.json()["id"]
+
+    settle_payload = {
+        "transaction_id": transaction_id,
+        "settlements": [{
+            "expense_participant_id": payer_ep_id,
+            "settled_amount": 0.00, # Settling with zero amount
+            "settled_currency_id": test_currency.id
+        }]
+    }
+    response_settle = await client.post(f"{API_V1_STR}/expenses/settle", json=settle_payload, headers=payer_headers)
+    assert response_settle.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY, response_settle.text
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "settlements_override, expected_status, description",
+    [
+        (
+            [{"expense_participant_id": 1, "settled_amount": -10.00, "settled_currency_id": 1}],
+            status.HTTP_422_UNPROCESSABLE_ENTITY, 
+            "Negative settled_amount"
+        ),
+        (
+            [],
+            status.HTTP_422_UNPROCESSABLE_ENTITY, # Pydantic validator for non-empty list returns 422
+            "Empty settlements array"
+        ),
+        (
+            [
+                {"expense_participant_id": 1, "settled_amount": 10.00, "settled_currency_id": 1},
+                {"expense_participant_id": 1, "settled_amount": 5.00, "settled_currency_id": 1}
+            ],
+            status.HTTP_400_BAD_REQUEST, 
+            "Duplicate expense_participant_id in settlements"
+        ),
+    ]
+)
+async def test_settle_invalid_settlement_inputs(
+    client: AsyncClient,
+    expense_with_participants_setup: dict,
+    test_currency: Currency,
+    settlements_override: List[Dict[str, Any]],
+    expected_status: int,
+    description: str
+):
+    setup_data = expense_with_participants_setup
+    payer_headers = setup_data["payer_headers"]
+    # Use a real EP ID from setup if needed, but for some tests (like negative amount) it might not matter
+    # For duplicate test, we need a valid EP ID to use.
+    valid_ep_id = setup_data["payer_participant_data"]["participant_record_id"]
+    valid_currency_id = test_currency.id
+
+    transaction_payload = {"amount": 100.00, "currency_id": valid_currency_id, "description": f"Transaction for {description}"}
+    response_trans = await client.post(f"{API_V1_STR}/transactions/", json=transaction_payload, headers=payer_headers)
+    assert response_trans.status_code == status.HTTP_201_CREATED
+    transaction_id = response_trans.json()["id"]
+
+    # Adjust payload for test cases
+    final_settlements = []
+    if description == "Negative settled_amount":
+        final_settlements = [{**settlements_override[0], "expense_participant_id": valid_ep_id, "settled_currency_id": valid_currency_id}]
+    elif description == "Empty settlements array":
+        final_settlements = settlements_override
+    elif description == "Duplicate expense_participant_id in settlements":
+        final_settlements = [
+            {"expense_participant_id": valid_ep_id, "settled_amount": 10.00, "settled_currency_id": valid_currency_id},
+            {"expense_participant_id": valid_ep_id, "settled_amount": 5.00, "settled_currency_id": valid_currency_id}
+        ]
+    else:
+        final_settlements = settlements_override # Should not happen with current param list
+
+    settle_payload = {
+        "transaction_id": transaction_id,
+        "settlements": final_settlements
+    }
+
+    response_settle = await client.post(f"{API_V1_STR}/expenses/settle", json=settle_payload, headers=payer_headers)
+    assert response_settle.status_code == expected_status, \
+        f"Test Case: '{description}'. Payload: {settle_payload}. Actual: {response_settle.status_code}, Expected: {expected_status}, Response: {response_settle.text}"

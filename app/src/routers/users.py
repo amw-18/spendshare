@@ -67,11 +67,17 @@ async def create_user_endpoint(
 
 @router.get("/", response_model=List[schemas.UserRead])
 async def read_users_endpoint(
-    *,  # Added for consistency, if skip/limit are to be query params, they should be after session
+    *,
     session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
     skip: int = 0,
     limit: int = 100,
 ) -> List[User]:
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this resource",
+        )
     statement = select(User).offset(skip).limit(limit)
     result = await session.exec(statement)
     users = list(result)
@@ -235,6 +241,30 @@ async def delete_user_endpoint(
     await session.delete(db_user)
     await session.commit()
     return user_id
+
+
+
+@router.post("/admin/login_as/{user_id_to_impersonate}", response_model=schemas.Token)
+async def admin_login_as_user_endpoint(
+    *,
+    session: AsyncSession = Depends(get_session),
+    user_id_to_impersonate: int,
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to perform this action",
+        )
+
+    user_to_impersonate = await get_object_or_404(
+        session, User, user_id_to_impersonate
+    )
+
+    access_token = create_access_token(
+        data={"sub": user_to_impersonate.username, "user_id": user_to_impersonate.id}
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
 
 
 @router.post("/token", response_model=schemas.Token)

@@ -288,6 +288,13 @@ class SettleExpensesRequest(SQLModel):
     transaction_id: int
     settlements: List[ExpenseParticipantSettlementInfo]
 
+    @field_validator("settlements")
+    @classmethod
+    def settlements_must_not_be_empty(cls, v: List[ExpenseParticipantSettlementInfo]) -> List[ExpenseParticipantSettlementInfo]:
+        if not v:
+            raise ValueError("Settlements list cannot be empty.")
+        return v
+
 
 class SettlementResultItem(SQLModel):
     expense_participant_id: int # The ID of the ExpenseParticipant link record
