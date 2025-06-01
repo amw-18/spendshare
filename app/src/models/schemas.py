@@ -143,6 +143,7 @@ class ParticipantUpdate(SQLModel):
 
 # Schemas for reading participant details with shares
 class ExpenseParticipantBase(SQLModel):
+    id: int # Added id field
     user_id: int
     expense_id: int
     share_amount: Optional[float]
@@ -154,6 +155,10 @@ class ExpenseParticipantRead(ExpenseParticipantBase):
 
 class ExpenseParticipantReadWithUser(ExpenseParticipantRead):
     user: UserRead
+    settled_transaction_id: Optional[int] = None
+    settled_amount_in_transaction_currency: Optional[float] = None
+    settled_currency_id: Optional[int] = None # Currency ID of the transaction used for settlement
+    settled_currency: Optional["CurrencyRead"] = None # Currency object of the transaction, use forward reference
 
 
 # Schemas with Relationships (for responses)
@@ -252,3 +257,48 @@ class ConversionRateRead(ConversionRateBase):
     timestamp: datetime
     from_currency: Optional[CurrencyRead] = None
     to_currency: Optional[CurrencyRead] = None
+
+
+# Transaction Schemas
+class TransactionBase(SQLModel):
+    amount: float = Field(gt=0)
+    currency_id: int
+    description: Optional[str] = None
+
+
+class TransactionCreate(TransactionBase):
+    pass
+
+
+class TransactionRead(TransactionBase):
+    id: int
+    timestamp: datetime
+    created_by_user_id: int
+    currency: Optional[CurrencyRead] = None
+
+
+# Settlement Schemas
+class ExpenseParticipantSettlementInfo(SQLModel):
+    expense_participant_id: int # This refers to the primary key of the ExpenseParticipant table link.
+    settled_amount: float = Field(gt=0) # Amount settled in the currency of the transaction
+    settled_currency_id: int # Currency ID of the transaction, for validation
+
+
+class SettleExpensesRequest(SQLModel):
+    transaction_id: int
+    settlements: List[ExpenseParticipantSettlementInfo]
+
+
+class SettlementResultItem(SQLModel):
+    expense_participant_id: int # The ID of the ExpenseParticipant link record
+    settled_transaction_id: int
+    settled_amount_in_transaction_currency: float
+    settled_currency_id: int # This is the currency_id of the transaction
+    status: str
+    message: Optional[str] = None
+
+
+class SettlementResponse(SQLModel):
+    status: str
+    message: Optional[str] = None
+    updated_expense_participations: List[SettlementResultItem]

@@ -1,21 +1,144 @@
-```python
 import pytest
+import pytest # For pytest.fixture
+import pytest_asyncio # For async fixtures
 from httpx import AsyncClient
 from fastapi import status
+from typing import Dict, Any, List # For type hinting
 
 # Placeholder for API_V1_STR, adjust if your project uses a different prefix
 API_V1_STR = "/api/v1"
 
+from sqlmodel.ext.asyncio.session import AsyncSession # Import AsyncSession
+from src.models.models import Currency, User, Expense, ExpenseParticipant # Add necessary model imports for fixtures
+from src.core.security import get_password_hash # For creating users in fixtures
+from src.models import schemas as app_schemas # For payload creation
+
+# Helper fixture (factory pattern) to create a new user and return user model and token headers
+@pytest_asyncio.fixture
+async def new_user_with_token_factory(client: AsyncClient, async_db_session: AsyncSession, unique_id_generator):
+    async def _factory():
+        username = f"testuser_{unique_id_generator()}"
+        email = f"{username}@example.com"
+        password = "password123"
+
+        user_create = User(
+            username=username,
+            email=email,
+            hashed_password=get_password_hash(password),
+            is_admin=False
+        )
+        async_db_session.add(user_create)
+        await async_db_session.commit()
+        await async_db_session.refresh(user_create)
+
+        login_data = {"username": username, "password": password}
+        res = await client.post(f"{API_V1_STR}/users/token", data=login_data)
+        assert res.status_code == 200, f"Failed to log in new_user {username}. Response: {res.text}"
+        token = res.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        return {"user": user_create, "headers": headers, "password": password}
+    return _factory
+
+@pytest_asyncio.fixture
+async def new_user_with_token(new_user_with_token_factory: callable): # Keep one instance for tests that need just one "other" user
+    return await new_user_with_token_factory()
+
+@pytest_asyncio.fixture
+async def expense_with_participants_setup(
+    client: AsyncClient,
+    async_db_session: AsyncSession,
+    normal_user_token_headers: dict,
+    normal_user: User,
+    new_user_with_token_factory: callable, # Use the factory
+    test_currency: Currency
+):
+    payer_user_model = normal_user
+    participant1_info = await new_user_with_token_factory() # Call the factory
+    participant2_info = await new_user_with_token_factory() # Call the factory
+
+    user_create = User(
+        username=username,
+        email=email,
+        hashed_password=get_password_hash(password),
+        is_admin=False
+    )
+    async_db_session.add(user_create)
+    await async_db_session.commit()
+    await async_db_session.refresh(user_create)
+
+    login_data = {"username": username, "password": password}
+    res = await client.post(f"{API_V1_STR}/users/token", data=login_data)
+    assert res.status_code == 200, f"Failed to log in new_user {username}. Response: {res.text}"
+    token = res.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    return {"user": user_create, "headers": headers, "password": password}
+
+@pytest_asyncio.fixture
+async def expense_with_participants_setup(
+    client: AsyncClient,
+    async_db_session: AsyncSession,
+    normal_user_token_headers: dict,
+    normal_user: User,
+    new_user_with_token: callable,
+    test_currency: Currency
+):
+    payer_user_model = normal_user
+    participant1_info = await new_user_with_token()
+    participant2_info = await new_user_with_token()
+
+    expense_create_payload = {
+        "description": "Dinner with friends for settlement setup",
+        "amount": 300.00,
+        "currency_id": test_currency.id,
+    }
+
+    service_payload = {
+        "expense_in": expense_create_payload,
+        "participant_user_ids": [participant1_info["user"].id, participant2_info["user"].id, payer_user_model.id]
+    }
+
+    response = await client.post(
+        f"{API_V1_STR}/expenses/service/",
+        json=service_payload,
+        headers=normal_user_token_headers
+    )
+    assert response.status_code == status.HTTP_201_CREATED, \
+        f"Failed to create expense with participants: {response.text}"
+    created_expense_details = response.json()
+
+    participant1_record_id = None
+    participant2_record_id = None
+    payer_participant_record_id = None
+
+    for pd in created_expense_details["participant_details"]:
+        if pd["user"]["id"] == participant1_info["user"].id:
+            participant1_record_id = pd["id"]
+        elif pd["user"]["id"] == participant2_info["user"].id:
+            participant2_record_id = pd["id"]
+        elif pd["user"]["id"] == payer_user_model.id:
+            payer_participant_record_id = pd["id"]
+
+    assert participant1_record_id is not None, "Participant 1 EP record ID not found"
+    assert participant2_record_id is not None, "Participant 2 EP record ID not found"
+    assert payer_participant_record_id is not None, "Payer EP record ID not found"
+
+    return {
+        "payer_user": payer_user_model,
+        "payer_headers": normal_user_token_headers,
+        "participant1_data": {**participant1_info, "participant_record_id": participant1_record_id},
+        "participant2_data": {**participant2_info, "participant_record_id": participant2_record_id},
+        "payer_participant_data": {"user": payer_user_model, "headers": normal_user_token_headers, "participant_record_id": payer_participant_record_id},
+        "expense_details": created_expense_details,
+        "expense_currency": test_currency,
+    }
+
 @pytest.mark.asyncio
 async def test_create_transaction(
-    client: AsyncClient, normal_user_token_headers: dict, test_currency_sync: dict
+    client: AsyncClient, normal_user_token_headers: dict, test_currency: Currency
 ):
-    """
-    Test creating a new transaction.
-    Corresponds to: POST /api/v1/transactions/
-    """
-    currency_id = test_currency_sync["id"]
-
+    currency_id = test_currency.id
     payload = {
         "amount": 100.50,
         "currency_id": currency_id,
@@ -34,18 +157,15 @@ async def test_create_transaction(
     assert "id" in data
     assert "timestamp" in data
     assert "created_by_user_id" in data
-    # assert "currency" in data # Check if TransactionRead includes Currency object (it should, as per openapi.json)
+    assert "currency" in data
+    assert data["currency"]["id"] == currency_id
+    assert data["currency"]["code"] == test_currency.code
 
 @pytest.mark.asyncio
 async def test_get_transaction(
-    client: AsyncClient, normal_user_token_headers: dict, test_currency_sync: dict
+    client: AsyncClient, normal_user_token_headers: dict, test_currency: Currency, normal_user: User
 ):
-    """
-    Test retrieving a specific transaction by its ID.
-    Corresponds to: GET /api/v1/transactions/{transaction_id}
-    """
-    currency_id = test_currency_sync["id"]
-    # First, create a transaction to retrieve
+    currency_id = test_currency.id
     payload_create = {
         "amount": 75.00,
         "currency_id": currency_id,
@@ -69,15 +189,74 @@ async def test_get_transaction(
     assert data["amount"] == payload_create["amount"]
     assert data["currency_id"] == payload_create["currency_id"]
     assert data["description"] == payload_create["description"]
-    assert "currency" in data # TransactionRead should include the currency object
-    if data.get("currency"):
-        assert data["currency"]["id"] == currency_id
+    assert data["created_by_user_id"] == normal_user.id
+    assert "currency" in data
+    assert data["currency"]["id"] == currency_id
+    assert data["currency"]["code"] == test_currency.code
+
+@pytest.mark.asyncio
+async def test_get_transaction_access_control(
+    client: AsyncClient,
+    normal_user: User,
+    normal_user_token_headers: dict,
+    new_user_with_token_factory: callable, # Use factory for multiple users
+    admin_user_token_headers: dict,
+    expense_with_participants_setup: dict,
+    test_currency: Currency
+):
+    payload_create = {
+        "amount": 50.00,
+        "currency_id": test_currency.id,
+        "description": "Access control test transaction"
+    }
+    response_create = await client.post(
+        f"{API_V1_STR}/transactions/", json=payload_create, headers=normal_user_token_headers
+    )
+    assert response_create.status_code == status.HTTP_201_CREATED
+    transaction_id = response_create.json()["id"]
+
+    response_get_creator = await client.get(
+        f"{API_V1_STR}/transactions/{transaction_id}", headers=normal_user_token_headers
+    )
+    assert response_get_creator.status_code == status.HTTP_200_OK
+
+    other_user_info = await new_user_with_token_factory() # Call factory
+    response_get_other = await client.get(
+        f"{API_V1_STR}/transactions/{transaction_id}", headers=other_user_info["headers"]
+    )
+    assert response_get_other.status_code == status.HTTP_403_FORBIDDEN
+
+    response_get_admin = await client.get(
+        f"{API_V1_STR}/transactions/{transaction_id}", headers=admin_user_token_headers
+    )
+    assert response_get_admin.status_code == status.HTTP_200_OK
+
+    setup_data = expense_with_participants_setup
+    payer_headers = setup_data["payer_headers"]
+    participant1_ep_id = setup_data["participant1_data"]["participant_record_id"]
+    participant1_headers = setup_data["participant1_data"]["headers"]
+    participant2_headers = setup_data["participant2_data"]["headers"]
+
+    settlement_tx_payload = {"amount": 100.00, "currency_id": test_currency.id, "description": "Tx for participant access test"}
+    resp_settlement_tx = await client.post(f"{API_V1_STR}/transactions/", json=settlement_tx_payload, headers=payer_headers)
+    assert resp_settlement_tx.status_code == status.HTTP_201_CREATED
+    settlement_transaction_id = resp_settlement_tx.json()["id"]
+
+    settle_p1_payload = {
+        "transaction_id": settlement_transaction_id,
+        "settlements": [{"expense_participant_id": participant1_ep_id, "settled_amount": 50.00, "settled_currency_id": test_currency.id}]
+    }
+    resp_settle_p1 = await client.post(f"{API_V1_STR}/expenses/settle", json=settle_p1_payload, headers=payer_headers)
+    assert resp_settle_p1.status_code == status.HTTP_200_OK
+
+    resp_get_p1 = await client.get(f"{API_V1_STR}/transactions/{settlement_transaction_id}", headers=participant1_headers)
+    assert resp_get_p1.status_code == status.HTTP_200_OK
+
+    resp_get_p2 = await client.get(f"{API_V1_STR}/transactions/{settlement_transaction_id}", headers=participant2_headers)
+    assert resp_get_p2.status_code == status.HTTP_403_FORBIDDEN
 
 @pytest.mark.asyncio
 async def test_get_transaction_not_found(client: AsyncClient, normal_user_token_headers: dict):
-    """
-    Test retrieving a non-existent transaction.
-    """
     non_existent_id = 999999
     response = await client.get(
         f"{API_V1_STR}/transactions/{non_existent_id}",
@@ -88,152 +267,264 @@ async def test_get_transaction_not_found(client: AsyncClient, normal_user_token_
 @pytest.mark.asyncio
 async def test_settle_expense_participations(
     client: AsyncClient,
-    normal_user_token_headers: dict,
-    # Fixtures that would be defined in conftest.py:
-    test_user_factory: callable,
-    test_currency_factory: callable,
-    # The following fixture would be more complex, creating an expense and participants,
-    # and returning the expense details along with *actual* ExpenseParticipant IDs.
-    # For now, we'll mock these IDs or parts of this setup.
-    # test_expense_with_participants_fixture: dict
+    expense_with_participants_setup: dict,
+    test_currency: Currency
 ):
-    """
-    Test settling expense participations with a transaction.
-    Corresponds to: POST /api/v1/expenses/settle
-    NOTE: This test makes assumptions about how ExpenseParticipant IDs are generated/retrieved.
-    """
-    # 1. Setup:
-    # Create a currency for the transaction
-    transaction_currency = await test_currency_factory(code="TCX", name="TransactionCoinSettle")
-    transaction_currency_id = transaction_currency["id"]
+    setup_data = expense_with_participants_setup
+    payer_headers = setup_data["payer_headers"]
+    participant1_data = setup_data["participant1_data"]
+    payer_ep_id = setup_data["payer_participant_data"]["participant_record_id"]
+    participant1_ep_id = participant1_data["participant_record_id"]
+    expense_id = setup_data["expense_details"]["id"]
 
-    # Create a currency for an expense (can be different from transaction currency)
-    expense_currency = await test_currency_factory(code="ECX", name="ExpenseCoinSettle")
-    expense_currency_id = expense_currency["id"]
+    transaction_currency_id = test_currency.id
 
-    # Create an expense (paid by the normal_user from normal_user_token_headers)
-    expense_payload = {
-        "description": "Group Dinner for Settlement Test",
-        "amount": 150.00,
-        "currency_id": expense_currency_id,
-    }
-    response_exp = await client.post(f"{API_V1_STR}/expenses/", json=expense_payload, headers=normal_user_token_headers)
-    assert response_exp.status_code == status.HTTP_201_CREATED, response_exp.text
-    created_expense = response_exp.json()
-    expense_id = created_expense["id"]
-
-    # This is where it gets tricky: ExpenseParticipant records.
-    # The API to create/add participants to an expense is not part of this issue's scope.
-    # The `SettleExpensesRequest` needs `expense_participant_id`.
-    # We assume these are integer PKs of an ExpenseParticipant table.
-    # For this test, we'll use placeholder IDs. In a real scenario, these would be
-    # retrieved after setting up an expense with its participants via existing API endpoints.
-    # (e.g., if POST /expenses/ also handles participants or if there's a PUT /expenses/{id})
-    # For now, we cannot create actual ExpenseParticipant records and get their IDs.
-    # So, this test will focus on the call to /settle and the expected structure.
-    mock_expense_participant_id1 = 1001  # Placeholder
-    mock_expense_participant_id2 = 1002  # Placeholder
-
-    # 2. Create a Transaction
     transaction_payload = {
-        "amount": 100.00, # Sufficient to cover settlements
+        "amount": 200.00,
         "currency_id": transaction_currency_id,
-        "description": "Settlement transaction for group dinner"
+        "description": "Settlement transaction"
     }
     response_trans = await client.post(
         f"{API_V1_STR}/transactions/",
         json=transaction_payload,
-        headers=normal_user_token_headers
+        headers=payer_headers
     )
     assert response_trans.status_code == status.HTTP_201_CREATED, response_trans.text
     transaction_data = response_trans.json()
     transaction_id = transaction_data["id"]
 
-    # 3. Prepare settlement payload
-    settle_payload = {
+    payer_share_amount_to_settle = 100.00
+    settle_payload_payer = {
         "transaction_id": transaction_id,
-        "settlements": [
-            {
-                "expense_participant_id": mock_expense_participant_id1,
-                "settled_amount": 40.00, # 40 TCX for participant 1's share
-                "settled_currency_id": transaction_currency_id
-            },
-            {
-                "expense_participant_id": mock_expense_participant_id2,
-                "settled_amount": 60.00, # 60 TCX for participant 2's share
-                "settled_currency_id": transaction_currency_id
-            }
-        ]
+        "settlements": [{
+            "expense_participant_id": payer_ep_id,
+            "settled_amount": payer_share_amount_to_settle,
+            "settled_currency_id": transaction_currency_id
+        }]
     }
-
-    # 4. Perform settlement
-    response_settle = await client.post(
+    response_settle_payer = await client.post(
         f"{API_V1_STR}/expenses/settle",
-        json=settle_payload,
-        headers=normal_user_token_headers
+        json=settle_payload_payer,
+        headers=payer_headers
     )
-    assert response_settle.status_code == status.HTTP_200_OK, f"Actual: {response_settle.status_code}, Expected: {status.HTTP_200_OK}, Response: {response_settle.text}"
+    assert response_settle_payer.status_code == status.HTTP_200_OK, response_settle_payer.text
+    settle_data_payer = response_settle_payer.json()
+    assert settle_data_payer["status"].lower() == "completed"
+    assert len(settle_data_payer["updated_expense_participations"]) == 1
+    payer_settlement_result = settle_data_payer["updated_expense_participations"][0]
+    assert payer_settlement_result["expense_participant_id"] == payer_ep_id
+    assert payer_settlement_result["settled_transaction_id"] == transaction_id
+    assert payer_settlement_result["settled_amount_in_transaction_currency"] == payer_share_amount_to_settle
+    assert payer_settlement_result["settled_currency_id"] == transaction_currency_id
+    assert payer_settlement_result["status"].lower() == "success"
 
-    settle_data = response_settle.json()
-    assert settle_data["status"].lower() == "success" # Or "partial_success"
-    assert len(settle_data["updated_expense_participations"]) == 2
+    participant1_share_amount_to_settle = 100.00
+    participant1_transaction_payload = {
+        "amount": participant1_share_amount_to_settle,
+        "currency_id": transaction_currency_id,
+        "description": "Participant1 settlement transaction"
+    }
+    response_trans_p1 = await client.post(
+        f"{API_V1_STR}/transactions/",
+        json=participant1_transaction_payload,
+        headers=participant1_data["headers"]
+    )
+    assert response_trans_p1.status_code == status.HTTP_201_CREATED, response_trans_p1.text
+    p1_transaction_id = response_trans_p1.json()["id"]
 
-    for item in settle_data["updated_expense_participations"]:
-        assert item["settled_transaction_id"] == transaction_id
-        assert item["settled_currency_id"] == transaction_currency_id
-        assert item["status"].lower() == "updated"
-        if item["expense_participant_id"] == mock_expense_participant_id1:
-            assert item["settled_amount_in_transaction_currency"] == 40.00
-        elif item["expense_participant_id"] == mock_expense_participant_id2:
-            assert item["settled_amount_in_transaction_currency"] == 60.00
+    settle_payload_participant1_own_tx = {
+        "transaction_id": p1_transaction_id,
+        "settlements": [{
+            "expense_participant_id": participant1_ep_id,
+            "settled_amount": participant1_share_amount_to_settle,
+            "settled_currency_id": transaction_currency_id
+        }]
+    }
+    response_settle_participant1 = await client.post(
+        f"{API_V1_STR}/expenses/settle",
+        json=settle_payload_participant1_own_tx,
+        headers=participant1_data["headers"]
+    )
+    assert response_settle_participant1.status_code == status.HTTP_200_OK, response_settle_participant1.text
+    settle_data_participant1 = response_settle_participant1.json()
+    assert settle_data_participant1["status"].lower() == "completed"
+    assert len(settle_data_participant1["updated_expense_participations"]) == 1
+    p1_settlement_result = settle_data_participant1["updated_expense_participations"][0]
+    assert p1_settlement_result["expense_participant_id"] == participant1_ep_id
+    assert p1_settlement_result["settled_transaction_id"] == p1_transaction_id
+    assert p1_settlement_result["status"].lower() == "success"
 
-    # 5. Verify by fetching the expense and checking participant details (Conceptual)
-    # This part will likely fail or need adjustment because the mock_expense_participant_ids
-    # are not linked to actual users/participants of the created_expense.
-    # The backend would need to resolve these IDs to actual User+Expense pairs.
     response_get_expense = await client.get(
         f"{API_V1_STR}/expenses/{expense_id}",
-        headers=normal_user_token_headers
+        headers=payer_headers
     )
     assert response_get_expense.status_code == status.HTTP_200_OK, response_get_expense.text
-    expense_details = response_get_expense.json()
+    expense_details_after = response_get_expense.json()
 
-    # The following checks are highly conceptual due to mock IDs:
-    # We are checking if *any* participant in the expense now shows these details.
-    # A more accurate test would require knowing which user_id corresponds to mock_expense_participant_id1/2.
-    participant1_settled = False
-    participant2_settled = False
-    for p_detail in expense_details.get("participant_details", []):
-        if p_detail.get("settled_transaction_id") == transaction_id:
-            if p_detail.get("expense_id") == expense_id: # Ensure it's for the correct expense
-                # This assumes the participant_details list will contain entries that were conceptually
-                # linked via mock_expense_participant_id1 and mock_expense_participant_id2
-                if p_detail.get("settled_amount_in_transaction_currency") == 40.00:
-                    participant1_settled = True
-                    assert p_detail["settled_currency_id"] == transaction_currency_id
-                    assert p_detail["settled_currency"]["id"] == transaction_currency_id
-                elif p_detail.get("settled_amount_in_transaction_currency") == 60.00:
-                    participant2_settled = True
-                    assert p_detail["settled_currency_id"] == transaction_currency_id
-                    assert p_detail["settled_currency"]["id"] == transaction_currency_id
+    found_payer_settlement = False
+    found_p1_settlement = False
 
-    # These assertions will currently rely on the backend somehow associating the mock IDs or
-    # the test being adapted once participant creation/retrieval is clear.
-    # assert participant1_settled, "Settlement details for participant 1 not reflected in fetched expense"
-    # assert participant2_settled, "Settlement details for participant 2 not reflected in fetched expense"
+    for p_detail in expense_details_after["participant_details"]:
+        ep_id_in_detail = p_detail["id"]
 
+        if ep_id_in_detail == payer_ep_id:
+            assert p_detail["settled_transaction_id"] == transaction_id
+            assert p_detail["settled_amount_in_transaction_currency"] == payer_share_amount_to_settle
+            assert p_detail["settled_currency_id"] == transaction_currency_id
+            assert p_detail["settled_currency"]["id"] == transaction_currency_id
+            found_payer_settlement = True
+
+        if ep_id_in_detail == participant1_ep_id:
+            assert p_detail["settled_transaction_id"] == p1_transaction_id
+            assert p_detail["settled_amount_in_transaction_currency"] == participant1_share_amount_to_settle
+            assert p_detail["settled_currency_id"] == transaction_currency_id
+            assert p_detail["settled_currency"]["id"] == transaction_currency_id
+            found_p1_settlement = True
+
+    assert found_payer_settlement, "Payer settlement details not found or incorrect in fetched expense."
+    assert found_p1_settlement, "Participant1 settlement details not found or incorrect in fetched expense."
+
+@pytest.mark.asyncio
+async def test_settle_by_non_transaction_creator(
+    client: AsyncClient,
+    expense_with_participants_setup: dict,
+    test_currency: Currency
+):
+    setup_data = expense_with_participants_setup
+    payer_headers = setup_data["payer_headers"]
+    participant1_headers = setup_data["participant1_data"]["headers"]
+    participant1_ep_id = setup_data["participant1_data"]["participant_record_id"]
+
+    transaction_payload = {"amount": 100.00, "currency_id": test_currency.id, "description": "Payer's Transaction"}
+    response_trans = await client.post(f"{API_V1_STR}/transactions/", json=transaction_payload, headers=payer_headers)
+    assert response_trans.status_code == status.HTTP_201_CREATED
+    payers_transaction_id = response_trans.json()["id"]
+
+    settle_payload = {
+        "transaction_id": payers_transaction_id,
+        "settlements": [{"expense_participant_id": participant1_ep_id, "settled_amount": 50.00, "settled_currency_id": test_currency.id}]
+    }
+    response_settle = await client.post(f"{API_V1_STR}/expenses/settle", json=settle_payload, headers=participant1_headers)
+    assert response_settle.status_code == status.HTTP_403_FORBIDDEN
+
+@pytest.mark.asyncio
+async def test_settle_other_user_expense_part(
+    client: AsyncClient,
+    expense_with_participants_setup: dict,
+    test_currency: Currency
+):
+    setup_data = expense_with_participants_setup
+    payer_headers = setup_data["payer_headers"]
+    participant1_ep_id = setup_data["participant1_data"]["participant_record_id"]
+
+    transaction_payload = {"amount": 100.00, "currency_id": test_currency.id, "description": "Payer's Transaction for settling other's share"}
+    response_trans = await client.post(f"{API_V1_STR}/transactions/", json=transaction_payload, headers=payer_headers)
+    assert response_trans.status_code == status.HTTP_201_CREATED
+    transaction_id = response_trans.json()["id"]
+
+    settle_payload = {
+        "transaction_id": transaction_id,
+        "settlements": [{"expense_participant_id": participant1_ep_id, "settled_amount": 50.00, "settled_currency_id": test_currency.id}]
+    }
+    response_settle = await client.post(f"{API_V1_STR}/expenses/settle", json=settle_payload, headers=payer_headers)
+    assert response_settle.status_code == status.HTTP_200_OK
+    settle_data = response_settle.json()
+    assert settle_data["updated_expense_participations"][0]["status"].lower() == "failed"
+    assert "cannot settle expense participations for another user" in settle_data["updated_expense_participations"][0]["message"].lower()
+
+@pytest.mark.asyncio
+async def test_settle_currency_mismatch(
+    client: AsyncClient,
+    expense_with_participants_setup: dict,
+    test_currency: Currency,
+    currency_factory: callable
+):
+    setup_data = expense_with_participants_setup
+    payer_headers = setup_data["payer_headers"]
+    payer_ep_id = setup_data["payer_participant_data"]["participant_record_id"]
+
+    other_currency = await currency_factory(code="OTH", name="OtherCoin")
+
+    transaction_payload = {"amount": 100.00, "currency_id": test_currency.id, "description": "Transaction in test_currency"}
+    response_trans = await client.post(f"{API_V1_STR}/transactions/", json=transaction_payload, headers=payer_headers)
+    assert response_trans.status_code == status.HTTP_201_CREATED
+    transaction_id = response_trans.json()["id"]
+
+    settle_payload = {
+        "transaction_id": transaction_id,
+        "settlements": [{"expense_participant_id": payer_ep_id, "settled_amount": 50.00, "settled_currency_id": other_currency.id}]
+    }
+    response_settle = await client.post(f"{API_V1_STR}/expenses/settle", json=settle_payload, headers=payer_headers)
+    assert response_settle.status_code == status.HTTP_200_OK
+    settle_data = response_settle.json()
+    assert settle_data["updated_expense_participations"][0]["status"].lower() == "failed"
+    assert "does not match transaction currency id" in settle_data["updated_expense_participations"][0]["message"].lower()
+
+@pytest.mark.asyncio
+async def test_settle_expense_participant_not_found(
+    client: AsyncClient,
+    normal_user_token_headers: dict,
+    test_currency: Currency
+):
+    transaction_payload = {"amount": 100.00, "currency_id": test_currency.id, "description": "Tx for non-existent EP"}
+    response_trans = await client.post(f"{API_V1_STR}/transactions/", json=transaction_payload, headers=normal_user_token_headers)
+    assert response_trans.status_code == status.HTTP_201_CREATED
+    transaction_id = response_trans.json()["id"]
+
+    fake_ep_id = 99999
+    settle_payload = {
+        "transaction_id": transaction_id,
+        "settlements": [{"expense_participant_id": fake_ep_id, "settled_amount": 50.00, "settled_currency_id": test_currency.id}]
+    }
+    response_settle = await client.post(f"{API_V1_STR}/expenses/settle", json=settle_payload, headers=normal_user_token_headers)
+    assert response_settle.status_code == status.HTTP_200_OK
+    settle_data = response_settle.json()
+    assert settle_data["updated_expense_participations"][0]["status"].lower() == "failed"
+    assert "expenseparticipant record not found" in settle_data["updated_expense_participations"][0]["message"].lower()
+
+@pytest.mark.asyncio
+async def test_settle_already_settled_expense_part(
+    client: AsyncClient,
+    expense_with_participants_setup: dict,
+    test_currency: Currency
+):
+    setup_data = expense_with_participants_setup
+    payer_headers = setup_data["payer_headers"]
+    payer_ep_id = setup_data["payer_participant_data"]["participant_record_id"]
+
+    tx_a_payload = {"amount": 50.00, "currency_id": test_currency.id, "description": "Transaction A"}
+    resp_tx_a = await client.post(f"{API_V1_STR}/transactions/", json=tx_a_payload, headers=payer_headers)
+    assert resp_tx_a.status_code == status.HTTP_201_CREATED
+    tx_a_id = resp_tx_a.json()["id"]
+
+    settle_with_tx_a_payload = {
+        "transaction_id": tx_a_id,
+        "settlements": [{"expense_participant_id": payer_ep_id, "settled_amount": 50.00, "settled_currency_id": test_currency.id}]
+    }
+    resp_settle_a = await client.post(f"{API_V1_STR}/expenses/settle", json=settle_with_tx_a_payload, headers=payer_headers)
+    assert resp_settle_a.status_code == status.HTTP_200_OK
+    assert resp_settle_a.json()["updated_expense_participations"][0]["status"].lower() == "success"
+
+    tx_b_payload = {"amount": 50.00, "currency_id": test_currency.id, "description": "Transaction B"}
+    resp_tx_b = await client.post(f"{API_V1_STR}/transactions/", json=tx_b_payload, headers=payer_headers)
+    assert resp_tx_b.status_code == status.HTTP_201_CREATED
+    tx_b_id = resp_tx_b.json()["id"]
+
+    settle_with_tx_b_payload = {
+        "transaction_id": tx_b_id,
+        "settlements": [{"expense_participant_id": payer_ep_id, "settled_amount": 50.00, "settled_currency_id": test_currency.id}]
+    }
+    resp_settle_b = await client.post(f"{API_V1_STR}/expenses/settle", json=settle_with_tx_b_payload, headers=payer_headers)
+    assert resp_settle_b.status_code == status.HTTP_200_OK
+    settle_data_b = resp_settle_b.json()
+    assert settle_data_b["updated_expense_participations"][0]["status"].lower() == "failed"
+    assert "already settled by transaction" in settle_data_b["updated_expense_participations"][0]["message"].lower()
 
 @pytest.mark.asyncio
 async def test_settle_expense_insufficient_transaction_amount(
-    client: AsyncClient, normal_user_token_headers: dict, test_currency_factory: callable
+    client: AsyncClient, normal_user_token_headers: dict, test_currency: Currency
 ):
-    """
-    Test settling with a transaction amount less than the sum of settled amounts.
-    Expected: 400 Bad Request.
-    """
-    transaction_currency = await test_currency_factory(code="TSHORT", name="TransactionShortCoin")
-    currency_id = transaction_currency["id"]
-
+    currency_id = test_currency.id
     transaction_payload = {
         "amount": 50.00,
         "currency_id": currency_id,
@@ -245,7 +536,6 @@ async def test_settle_expense_insufficient_transaction_amount(
     assert response_trans.status_code == status.HTTP_201_CREATED, response_trans.text
     transaction_id = response_trans.json()["id"]
 
-    # Mock IDs for expense participants
     mock_ep_id1 = 2001
     mock_ep_id2 = 2002
 
@@ -254,9 +544,8 @@ async def test_settle_expense_insufficient_transaction_amount(
         "settlements": [
             { "expense_participant_id": mock_ep_id1, "settled_amount": 30.00, "settled_currency_id": currency_id },
             { "expense_participant_id": mock_ep_id2, "settled_amount": 30.00, "settled_currency_id": currency_id }
-        ] # Total 60.00, but transaction is only 50.00
+        ]
     }
-
     response_settle = await client.post(
         f"{API_V1_STR}/expenses/settle", json=settle_payload, headers=normal_user_token_headers
     )
@@ -264,15 +553,11 @@ async def test_settle_expense_insufficient_transaction_amount(
 
 @pytest.mark.asyncio
 async def test_settle_expense_transaction_not_found(
-    client: AsyncClient, normal_user_token_headers: dict, test_currency_sync: dict
+    client: AsyncClient, normal_user_token_headers: dict, test_currency: Currency
 ):
-    """
-    Test settling with a non-existent transaction ID.
-    Expected: 404 Not Found.
-    """
-    currency_id = test_currency_sync["id"] # Need a valid currency_id for the payload
+    currency_id = test_currency.id
     non_existent_transaction_id = 888999
-    mock_ep_id1 = 3001 # Placeholder
+    mock_ep_id1 = 3001
 
     settle_payload = {
         "transaction_id": non_existent_transaction_id,
@@ -284,5 +569,3 @@ async def test_settle_expense_transaction_not_found(
         f"{API_V1_STR}/expenses/settle", json=settle_payload, headers=normal_user_token_headers
     )
     assert response_settle.status_code == status.HTTP_404_NOT_FOUND, f"Actual: {response_settle.status_code}, Expected: {status.HTTP_404_NOT_FOUND}, Response: {response_settle.text}"
-
-```
