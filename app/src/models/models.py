@@ -24,18 +24,28 @@ class UserGroupLink(SQLModel, table=True):
 
 
 class ExpenseParticipant(SQLModel, table=True):
-    __table_args__ = {"extend_existing": True}
+    __table_args__ = (
+        UniqueConstraint("user_id", "expense_id", name="uq_user_expense_participation"),
+        {"extend_existing": True},
+    )
+    id: Optional[int] = Field(default=None, primary_key=True, index=True)
     user_id: int = Field(
-        sa_column=Column(
-            Integer, ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
-        ),
+        sa_column=Column(Integer, ForeignKey("user.id", ondelete="CASCADE")),
     )
     expense_id: int = Field(
-        sa_column=Column(
-            Integer, ForeignKey("expense.id", ondelete="CASCADE"), primary_key=True
-        ),
+        sa_column=Column(Integer, ForeignKey("expense.id", ondelete="CASCADE")),
     )
     share_amount: float
+    settled_transaction_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, ForeignKey("transaction.id", ondelete="SET NULL")),
+    )
+    settled_amount_in_transaction_currency: Optional[float] = Field(default=None)
+
+    # Relationship to Transaction (optional, as not all participations are settled via a direct transaction record)
+    transaction: Optional["Transaction"] = Relationship(
+        back_populates="settled_expense_participations"
+    )
 
 
 class User(SQLModel, table=True):
@@ -63,6 +73,10 @@ class User(SQLModel, table=True):
     groups_created: List["Group"] = Relationship(
         back_populates="created_by",
         sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+    )
+    transactions_created: List["Transaction"] = Relationship(
+        back_populates="created_by",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}, # if user is deleted, their transactions are deleted
     )
 
 
@@ -136,6 +150,7 @@ class Currency(SQLModel, table=True):
         back_populates="to_currency",
         sa_relationship_kwargs={"foreign_keys": "[ConversionRate.to_currency_id]"},
     )
+    transactions: List["Transaction"] = Relationship(back_populates="currency")
 
 
 class ConversionRate(SQLModel, table=True):
@@ -167,4 +182,30 @@ class ConversionRate(SQLModel, table=True):
     to_currency: Optional["Currency"] = Relationship(
         back_populates="conversion_rates_to",
         sa_relationship_kwargs={"foreign_keys": "[ConversionRate.to_currency_id]"},
+    )
+
+
+class Transaction(SQLModel, table=True):
+    __table_args__ = {"extend_existing": True}
+    id: Optional[int] = Field(default=None, primary_key=True)
+    amount: float
+    currency_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("currency.id", ondelete="CASCADE"))
+    ) # If currency is deleted, cascade delete transactions
+    timestamp: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    description: Optional[str] = Field(default=None)
+    created_by_user_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("user.id", ondelete="CASCADE"))
+    ) # If user is deleted, cascade delete transactions
+
+    currency: "Currency" = Relationship(back_populates="transactions")
+    created_by: "User" = Relationship(back_populates="transactions_created")
+
+    settled_expense_participations: List["ExpenseParticipant"] = Relationship(
+        back_populates="transaction",
+        sa_relationship_kwargs={
+            "cascade": "save-update, merge", # Keep participations if transaction is deleted, just nullify the link
+        },
     )

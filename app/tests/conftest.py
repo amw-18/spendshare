@@ -160,15 +160,69 @@ async def admin_user() -> AsyncGenerator[User, None]:
             await session.commit()
 
 
-# Currency Fixture
+# Currency Fixture / Factory
 @pytest_asyncio.fixture
-async def test_currency(async_db_session: AsyncSession) -> Currency:
-    currency = Currency(code="USD", name="US Dollar", symbol="$")
-    async_db_session.add(currency)
-    await async_db_session.commit()
-    await async_db_session.refresh(currency)
+async def test_currency(async_db_session: AsyncSession) -> Currency: # Default currency
+    default_currency_code = "USD"
+    # Attempt to fetch existing default currency to avoid conflicts if tests run in a way that state leaks (should not happen with function scope db)
+    stmt = select(Currency).where(Currency.code == default_currency_code)
+    result = await async_db_session.exec(stmt)
+    currency = result.first()
+    if not currency:
+        currency = Currency(code=default_currency_code, name="US Dollar", symbol="$")
+        async_db_session.add(currency)
+        await async_db_session.commit()
+        await async_db_session.refresh(currency)
     return currency
 
+@pytest_asyncio.fixture
+async def currency_factory(async_db_session: AsyncSession, unique_id_generator):
+    created_currencies = []
+    async def _factory(code: str = None, name: str = None, symbol: str = None) -> Currency:
+        if code is None:
+            code = f"C{unique_id_generator()}" # Generate unique code if not provided
+
+        # Check if currency with this code already exists (important if factory is called multiple times with same code)
+        stmt = select(Currency).where(Currency.code == code)
+        result = await async_db_session.exec(stmt)
+        existing_currency = result.first()
+        if existing_currency:
+            # print(f"Factory returning existing currency: {code}")
+            return existing_currency
+
+        _name = name or f"{code} Name"
+        _symbol = symbol or f"{code[0]}"
+
+        new_currency = Currency(code=code, name=_name, symbol=_symbol)
+        async_db_session.add(new_currency)
+        await async_db_session.commit()
+        await async_db_session.refresh(new_currency)
+        created_currencies.append(new_currency)
+        # print(f"Factory created new currency: {new_currency.code}")
+        return new_currency
+
+    yield _factory
+
+    # Teardown: delete currencies created by this factory instance if necessary,
+    # though function-scoped db_setup_session should handle full cleanup.
+    # This is more for safety or if db scope changes.
+    # for cur in created_currencies:
+    #     try:
+    #         await async_db_session.delete(cur)
+    #     except Exception as e:
+    #         # print(f"Error deleting currency {cur.code} in factory teardown: {e}")
+    #         pass # Ignore errors if already deleted or session closed
+    # await async_db_session.commit()
+
+# Fixture to generate unique IDs for usernames, emails, etc. (moved from test_transactions.py)
+@pytest.fixture(scope="session")
+def unique_id_generator():
+    count = 0
+    def _generate_id():
+        nonlocal count
+        count += 1
+        return count
+    return _generate_id
 
 # Token Fixtures
 @pytest_asyncio.fixture

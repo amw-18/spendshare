@@ -2049,6 +2049,10 @@
             "type": "integer",
             "title": "Expense Id"
           },
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
           "share_amount": {
             "anyOf": [
               {
@@ -2091,6 +2095,7 @@
         },
         "type": "object",
         "required": [
+          "id",
           "user_id",
           "expense_id",
           "share_amount",
