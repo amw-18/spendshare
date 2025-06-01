@@ -50,30 +50,9 @@ async def create_transaction( # Added async
     session.add(db_transaction)
     await session.commit() # Added await
     await session.refresh(db_transaction) # Added await
-    # await session.refresh(db_transaction, attribute_names=['currency']) # To load relationship
+    await session.refresh(db_transaction, attribute_names=['currency']) # To load relationship
 
-    # Re-fetch with options to ensure relationships are loaded for the response model.
-    # This is often the most reliable way with async sessions too.
-    # After commit & refresh, the db_transaction object should have its ID.
-    # Accessing db_transaction.currency might trigger a load if lazy loading is configured and allowed in async,
-    # but explicit loading is safer for response models.
-
-    # Forcing load of currency for the response.
-    # The refresh above might not be enough for related objects in async,
-    # an explicit query with options is better.
-    loaded_transaction_stmt = (
-        select(Transaction)
-        .options(selectinload(Transaction.currency)) # Eagerly load currency
-        .where(Transaction.id == db_transaction.id)
-    )
-    result = await session.exec(loaded_transaction_stmt) # Added await
-    loaded_transaction = result.first()
-
-    if not loaded_transaction:
-         # This should ideally not happen if commit was successful
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create or retrieve transaction after commit")
-
-    return loaded_transaction
+    return db_transaction
 
 
 @router.get("/{transaction_id}", response_model=TransactionRead)

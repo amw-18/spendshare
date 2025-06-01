@@ -1,11 +1,3 @@
-import sys # Add sys import
-import os # Add os import
-# Ensure the app root (which contains 'src') is in sys.path
-# This is often needed if tests are run from a subdirectory or if PYTHONPATH isn't set up externally.
-# Assuming this conftest.py is in app/tests/, and src is in app/src/
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-
 from typing import AsyncGenerator
 
 import pytest
