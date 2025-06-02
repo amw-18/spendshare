@@ -52,12 +52,13 @@ async def test_db_tables_created_on_startup(client: AsyncClient):
 # You could also add a test for a known endpoint from one of the routers (e.g., /api/v1/users/)
 # to ensure routers are included and working after startup.
 @pytest.mark.asyncio
-async def test_users_endpoint_available_after_startup(
-    client: AsyncClient, admin_user_token_headers: dict[str, str]
+async def test_users_me_endpoint_available_after_startup( # Renamed for clarity
+    client: AsyncClient, normal_user_token_headers: dict[str, str] # Changed to normal_user
 ):
     response = await client.get(
-        "/api/v1/users/", headers=admin_user_token_headers
-    )  # This is a known endpoint from users router
+        "/api/v1/users/me", headers=normal_user_token_headers # Changed to /me
+    )  # This is a known, protected endpoint from users router
     assert response.status_code == status.HTTP_200_OK
-    # The response might be an empty list if no users, which is fine for this test.
-    assert isinstance(response.json(), list)
+    # The response should be a user object (dict)
+    assert isinstance(response.json(), dict)
+    assert "username" in response.json() # Check for a known field in UserRead

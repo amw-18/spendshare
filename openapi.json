@@ -14,14 +14,14 @@
         "summary": "Create User Endpoint",
         "operationId": "create_user_endpoint_api_v1_users__post",
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/UserCreate"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -30,66 +30,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UserRead"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "get": {
-        "tags": [
-          "users"
-        ],
-        "summary": "Read Users Endpoint",
-        "operationId": "read_users_endpoint_api_v1_users__get",
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "skip",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "default": 0,
-              "title": "Skip"
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "default": 100,
-              "title": "Limit"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/UserRead"
-                  },
-                  "title": "Response Read Users Endpoint Api V1 Users  Get"
                 }
               }
             }
@@ -351,53 +291,6 @@
           },
           "required": true
         },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Token"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/users/admin/login_as/{target_user_id}": {
-      "post": {
-        "tags": [
-          "users"
-        ],
-        "summary": "Admin Login As User",
-        "operationId": "admin_login_as_user_api_v1_users_admin_login_as__target_user_id__post",
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "target_user_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Target User Id"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1104,6 +997,154 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/expenses/settle": {
+      "post": {
+        "tags": [
+          "expenses"
+        ],
+        "summary": "Settle Expenses Endpoint",
+        "description": "Settle one or more expense participations using a transaction.\nAll or none.",
+        "operationId": "settle_expenses_endpoint_api_v1_expenses_settle_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettleExpensesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettlementResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/transactions/": {
+      "post": {
+        "tags": [
+          "Transactions"
+        ],
+        "summary": "Create Transaction",
+        "description": "Create a new transaction.",
+        "operationId": "create_transaction_api_v1_transactions__post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransactionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionRead"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/transactions/{transaction_id}": {
+      "get": {
+        "tags": [
+          "Transactions"
+        ],
+        "summary": "Read Transaction",
+        "description": "Get a specific transaction by its ID.",
+        "operationId": "read_transaction_api_v1_transactions__transaction_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "transaction_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Transaction Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionRead"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
           },
           "422": {
             "description": "Validation Error",
@@ -1893,6 +1934,10 @@
       },
       "ExpenseParticipantReadWithUser": {
         "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
           "user_id": {
             "type": "integer",
             "title": "User Id"
@@ -1914,16 +1959,84 @@
           },
           "user": {
             "$ref": "#/components/schemas/UserRead"
+          },
+          "settled_transaction_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settled Transaction Id"
+          },
+          "settled_amount_in_transaction_currency": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settled Amount In Transaction Currency"
+          },
+          "settled_currency_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settled Currency Id"
+          },
+          "settled_currency": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CurrencyRead"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
         "required": [
+          "id",
           "user_id",
           "expense_id",
           "share_amount",
           "user"
         ],
         "title": "ExpenseParticipantReadWithUser"
+      },
+      "ExpenseParticipantSettlementInfo": {
+        "properties": {
+          "expense_participant_id": {
+            "type": "integer",
+            "title": "Expense Participant Id"
+          },
+          "settled_amount": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Settled Amount"
+          },
+          "settled_currency_id": {
+            "type": "integer",
+            "title": "Settled Currency Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "expense_participant_id",
+          "settled_amount",
+          "settled_currency_id"
+        ],
+        "title": "ExpenseParticipantSettlementInfo"
       },
       "ExpenseRead": {
         "properties": {
@@ -2203,6 +2316,98 @@
         ],
         "title": "ParticipantUpdate"
       },
+      "SettleExpensesRequest": {
+        "properties": {
+          "transaction_id": {
+            "type": "integer",
+            "title": "Transaction Id"
+          },
+          "settlements": {
+            "items": {
+              "$ref": "#/components/schemas/ExpenseParticipantSettlementInfo"
+            },
+            "type": "array",
+            "title": "Settlements"
+          }
+        },
+        "type": "object",
+        "required": [
+          "transaction_id",
+          "settlements"
+        ],
+        "title": "SettleExpensesRequest"
+      },
+      "SettlementResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "updated_expense_participations": {
+            "items": {
+              "$ref": "#/components/schemas/SettlementResultItem"
+            },
+            "type": "array",
+            "title": "Updated Expense Participations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "updated_expense_participations"
+        ],
+        "title": "SettlementResponse"
+      },
+      "SettlementResultItem": {
+        "properties": {
+          "expense_participant_id": {
+            "type": "integer",
+            "title": "Expense Participant Id"
+          },
+          "settled_transaction_id": {
+            "type": "integer",
+            "title": "Settled Transaction Id"
+          },
+          "settled_amount_in_transaction_currency": {
+            "type": "number",
+            "title": "Settled Amount In Transaction Currency"
+          },
+          "settled_currency_id": {
+            "type": "integer",
+            "title": "Settled Currency Id"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "expense_participant_id",
+          "settled_transaction_id",
+          "settled_amount_in_transaction_currency",
+          "settled_currency_id"
+        ],
+        "title": "SettlementResultItem"
+      },
       "Token": {
         "properties": {
           "access_token": {
@@ -2220,6 +2425,92 @@
           "token_type"
         ],
         "title": "Token"
+      },
+      "TransactionCreate": {
+        "properties": {
+          "amount": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Amount"
+          },
+          "currency_id": {
+            "type": "integer",
+            "title": "Currency Id"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "required": [
+          "amount",
+          "currency_id"
+        ],
+        "title": "TransactionCreate"
+      },
+      "TransactionRead": {
+        "properties": {
+          "amount": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Amount"
+          },
+          "currency_id": {
+            "type": "integer",
+            "title": "Currency Id"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp"
+          },
+          "created_by_user_id": {
+            "type": "integer",
+            "title": "Created By User Id"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CurrencyRead"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "amount",
+          "currency_id",
+          "id",
+          "timestamp",
+          "created_by_user_id"
+        ],
+        "title": "TransactionRead"
       },
       "UserBalanceResponse": {
         "properties": {
@@ -2282,18 +2573,13 @@
           "id": {
             "type": "integer",
             "title": "Id"
-          },
-          "is_admin": {
-            "type": "boolean",
-            "title": "Is Admin"
           }
         },
         "type": "object",
         "required": [
           "username",
           "email",
-          "id",
-          "is_admin"
+          "id"
         ],
         "title": "UserRead"
       },
@@ -2333,17 +2619,6 @@
               }
             ],
             "title": "Password"
-          },
-          "is_admin": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Is Admin"
           }
         },
         "type": "object",

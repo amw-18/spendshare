@@ -1,13 +1,16 @@
-/* generated using openapi-typescript-codegen -- do not edit */
+/* generated using openapi-typescript-codegen -- do no edit */
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
 import type { ConversionRateCreate } from '../models/ConversionRateCreate';
 import type { ConversionRateRead } from '../models/ConversionRateRead';
+
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
+
 export class ConversionRatesService {
+
     /**
      * Create Conversion Rate
      * @param requestBody
@@ -27,6 +30,7 @@ export class ConversionRatesService {
             },
         });
     }
+
     /**
      * Read Conversion Rates
      * @param skip
@@ -50,6 +54,7 @@ export class ConversionRatesService {
             },
         });
     }
+
     /**
      * Read Latest Conversion Rate
      * @param fromCode Currency code to convert from (e.g., USD)
@@ -73,4 +78,5 @@ export class ConversionRatesService {
             },
         });
     }
+
 }

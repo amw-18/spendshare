@@ -65,19 +65,6 @@ async def create_user_endpoint(
     return db_user
 
 
-@router.get("/", response_model=List[schemas.UserRead])
-async def read_users_endpoint(
-    *,  # Added for consistency, if skip/limit are to be query params, they should be after session
-    session: AsyncSession = Depends(get_session),
-    skip: int = 0,
-    limit: int = 100,
-) -> List[User]:
-    statement = select(User).offset(skip).limit(limit)
-    result = await session.exec(statement)
-    users = list(result)
-    return users
-
-
 @router.get("/search", response_model=List[schemas.UserRead])
 async def search_users_endpoint(
     *,
@@ -90,7 +77,7 @@ async def search_users_endpoint(
     Returns a list of users matching the query.
     Accessible to any authenticated user.
     """
-    if not query or len(query) < 2: # Add minimum query length
+    if not query or len(query) < 2:  # Add minimum query length
         return []  # Return empty list if query is empty or too short
 
     statement = (
@@ -137,27 +124,12 @@ async def update_user_endpoint(
         session, User, user_id
     )  # This is the user to be updated
 
-    # Authorization check: Only admin or the user themselves can update
-    if not current_user.is_admin and current_user.id != user_id:
+    # Authorization check: User can only update their own account
+    if current_user.id != user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to update this user account",
         )
-
-    # Authorization check: Prevent non-admins from granting admin privileges
-    if (
-        user_in.is_admin is not None
-        and user_in.is_admin == True
-        and not current_user.is_admin
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to grant admin privileges",
-        )
-
-    # Prevent users from revoking their own admin status if they are the sole admin
-    # This logic is more complex and might require a global check or be handled as a separate feature.
-    # For now, we assume there's a mechanism or policy outside this direct endpoint to prevent this.
 
     user_data = user_in.model_dump(exclude_unset=True)
 
@@ -187,27 +159,7 @@ async def update_user_endpoint(
 
     # Update other fields
     for key, value in user_data.items():
-        # Special handling for is_admin: only allow if current_user is admin, or if user is de-adminning themselves (which is fine)
-        if key == "is_admin":
-            if current_user.is_admin:  # Admin can set it to True or False
-                setattr(db_user, key, value)
-            # else: non-admin cannot change is_admin (already covered by earlier check if they try to set to True)
-            # If a non-admin tries to set is_admin to False, it's a no-op if they are not admin.
-            # If they are admin and set to False, it's allowed.
-            # The initial check `if user_in.is_admin is not None and user_in.is_admin == True and not current_user.is_admin:`
-            # already prevents non-admins from setting is_admin to True.
-            # So, if we reach here, and key is "is_admin", and current_user is not admin, value must be False.
-            # Setting their own (already False) is_admin to False is a no-op and fine.
-            # This means we only need to ensure that if `is_admin` is in `user_data`, it's applied correctly based on permissions.
-            # The current logic with `exclude_unset` and the top-level check for `is_admin == True` is mostly sufficient.
-            # However, to be explicit:
-            elif (
-                current_user.id == user_id and value == False
-            ):  # User de-adminning themselves (if they were admin)
-                setattr(db_user, key, value)
-            # Other cases for 'is_admin' by non-admins are effectively blocked or no-ops.
-        else:
-            setattr(db_user, key, value)
+        setattr(db_user, key, value)
 
     session.add(db_user)
     await session.commit()
@@ -226,7 +178,8 @@ async def delete_user_endpoint(
         session, User, user_id
     )  # This is the user to be deleted
 
-    if not current_user.is_admin and current_user.id != user_id:
+    # User can only delete their own account
+    if current_user.id != user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to delete this user account",
@@ -259,3 +212,4 @@ async def login_for_access_token(
         data={"sub": user.username, "user_id": user.id}  # Add user_id to token payload
     )
     return {"access_token": access_token, "token_type": "bearer"}
+

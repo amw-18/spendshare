@@ -5,6 +5,7 @@ import pytest_asyncio  # For async fixtures
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import sessionmaker
+
 # import os # No longer needed after switching to in-memory DB
 from sqlmodel import SQLModel, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -14,7 +15,7 @@ from src.main import app  # Your FastAPI application instance
 
 
 from src.core.security import get_password_hash  # Added get_password_hash
-from src.models.models import ( # Restore global imports for fixture type hints and instantiation
+from src.models.models import (  # Restore global imports for fixture type hints and instantiation
     User,
     Group,
     UserGroupLink,
@@ -26,7 +27,7 @@ from src.models.models import ( # Restore global imports for fixture type hints 
 
 # TEST_DATABASE_PATH = "./test_app_temp.db" # Using in-memory database for tests
 # Use a separate SQLite database for testing
-TEST_DATABASE_URL = "sqlite+aiosqlite:///file:testdb?mode=memory&cache=shared&uri=true" # Using shared in-memory SQLite for tests
+TEST_DATABASE_URL = "sqlite+aiosqlite:///file:testdb?mode=memory&cache=shared&uri=true"  # Using shared in-memory SQLite for tests
 
 test_engine = create_async_engine(
     TEST_DATABASE_URL, echo=False, future=True
@@ -61,7 +62,7 @@ async def db_setup_session():
     yield
     async with test_engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.drop_all)
-    
+
     # Using in-memory database, no file post-cleanup needed.
 
 
@@ -88,7 +89,6 @@ async def normal_user() -> AsyncGenerator[User, None]:
         username="testuser",
         email="testuser_normal@example.com",
         hashed_password=get_password_hash("password123"),
-        is_admin=False,
     )
     async with TestingSessionLocal() as session:
         session.add(user)
@@ -122,52 +122,76 @@ async def normal_user() -> AsyncGenerator[User, None]:
             await session.commit()
 
 
+# Currency Fixture / Factory
 @pytest_asyncio.fixture
-async def admin_user() -> AsyncGenerator[User, None]:
-    admin = User(
-        username="adminuser",
-        email="adminuser_admin@example.com",
-        hashed_password=get_password_hash("password123"),
-        is_admin=True,
-    )
-    async with TestingSessionLocal() as session:
-        session.add(admin)
-        await session.commit()
-        await session.refresh(admin)
-
-        yield admin
-
-        # Teardown
-        admin_in_session = await session.get(User, admin.id)
-        if admin_in_session:
-            stmt_expenses = select(Expense).where(
-                Expense.paid_by_user_id == admin_in_session.id
-            )
-            result_expenses = await session.exec(stmt_expenses)
-            expenses_paid_by_user = result_expenses.all()
-
-            for expense_obj in expenses_paid_by_user:
-                stmt_participants = select(ExpenseParticipant).where(
-                    ExpenseParticipant.expense_id == expense_obj.id
-                )
-                result_participants = await session.exec(stmt_participants)
-                participants = result_participants.all()
-                for participant in participants:
-                    await session.delete(participant)
-                await session.delete(expense_obj)
-
-            await session.delete(admin_in_session)
-            await session.commit()
-
-
-# Currency Fixture
-@pytest_asyncio.fixture
-async def test_currency(async_db_session: AsyncSession) -> Currency:
-    currency = Currency(code="USD", name="US Dollar", symbol="$")
-    async_db_session.add(currency)
-    await async_db_session.commit()
-    await async_db_session.refresh(currency)
+async def test_currency(async_db_session: AsyncSession) -> Currency:  # Default currency
+    default_currency_code = "USD"
+    # Attempt to fetch existing default currency to avoid conflicts if tests run in a way that state leaks (should not happen with function scope db)
+    stmt = select(Currency).where(Currency.code == default_currency_code)
+    result = await async_db_session.exec(stmt)
+    currency = result.first()
+    if not currency:
+        currency = Currency(code=default_currency_code, name="US Dollar", symbol="$")
+        async_db_session.add(currency)
+        await async_db_session.commit()
+        await async_db_session.refresh(currency)
     return currency
+
+
+@pytest_asyncio.fixture
+async def currency_factory(async_db_session: AsyncSession, unique_id_generator):
+    created_currencies = []
+
+    async def _factory(
+        code: str = None, name: str = None, symbol: str = None
+    ) -> Currency:
+        if code is None:
+            code = f"C{unique_id_generator()}"  # Generate unique code if not provided
+
+        # Check if currency with this code already exists (important if factory is called multiple times with same code)
+        stmt = select(Currency).where(Currency.code == code)
+        result = await async_db_session.exec(stmt)
+        existing_currency = result.first()
+        if existing_currency:
+            # print(f"Factory returning existing currency: {code}")
+            return existing_currency
+
+        _name = name or f"{code} Name"
+        _symbol = symbol or f"{code[0]}"
+
+        new_currency = Currency(code=code, name=_name, symbol=_symbol)
+        async_db_session.add(new_currency)
+        await async_db_session.commit()
+        await async_db_session.refresh(new_currency)
+        created_currencies.append(new_currency)
+        # print(f"Factory created new currency: {new_currency.code}")
+        return new_currency
+
+    yield _factory
+
+    # Teardown: delete currencies created by this factory instance if necessary,
+    # though function-scoped db_setup_session should handle full cleanup.
+    # This is more for safety or if db scope changes.
+    # for cur in created_currencies:
+    #     try:
+    #         await async_db_session.delete(cur)
+    #     except Exception as e:
+    #         # print(f"Error deleting currency {cur.code} in factory teardown: {e}")
+    #         pass # Ignore errors if already deleted or session closed
+    # await async_db_session.commit()
+
+
+# Fixture to generate unique IDs for usernames, emails, etc. (moved from test_transactions.py)
+@pytest.fixture(scope="session")
+def unique_id_generator():
+    count = 0
+
+    def _generate_id():
+        nonlocal count
+        count += 1
+        return count
+
+    return _generate_id
 
 
 # Token Fixtures
@@ -185,15 +209,33 @@ async def normal_user_token_headers(
     return {"Authorization": f"Bearer {token}"}
 
 
+# Helper fixture (factory pattern) to create a new user and return user model and token headers
 @pytest_asyncio.fixture
-async def admin_user_token_headers(
-    client: AsyncClient, admin_user: User
-) -> dict[str, str]:
-    login_data = {"username": admin_user.username, "password": "password123"}
-    res = await client.post("/api/v1/users/token", data=login_data)
-    if res.status_code != 200:
-        pytest.fail(
-            f"Failed to log in admin_user. Status: {res.status_code}, Response: {res.text}"
+async def new_user_with_token_factory(
+    client: AsyncClient, async_db_session: AsyncSession, unique_id_generator
+):
+    async def _factory():
+        username = f"testuser_{unique_id_generator()}"
+        email = f"{username}@example.com"
+        password = "password123"
+
+        user_create = User(
+            username=username,
+            email=email,
+            hashed_password=get_password_hash(password),
         )
-    token = res.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
+        async_db_session.add(user_create)
+        await async_db_session.commit()
+        await async_db_session.refresh(user_create)
+
+        login_data = {"username": username, "password": password}
+        res = await client.post("/api/v1/users/token", data=login_data)
+        assert res.status_code == 200, (
+            f"Failed to log in new_user {username}. Response: {res.text}"
+        )
+        token = res.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        return {"user": user_create, "headers": headers, "password": password}
+
+    return _factory

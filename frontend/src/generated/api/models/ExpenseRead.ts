@@ -1,10 +1,12 @@
-/* generated using openapi-typescript-codegen -- do not edit */
+/* generated using openapi-typescript-codegen -- do no edit */
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+
 import type { CurrencyRead } from './CurrencyRead';
 import type { ExpenseParticipantReadWithUser } from './ExpenseParticipantReadWithUser';
 import type { UserRead } from './UserRead';
+
 export type ExpenseRead = {
     description?: string;
     amount: number;

@@ -45,13 +45,6 @@ def test_get_password_hash_empty_password():
     assert verify_password(password, hashed_password)
 
 
-# Note: Since these are not async functions, the tests don't need @pytest.mark.asyncio
-# If JWT token functions were added to security.py and they were async,
-# their tests would need the asyncio marker.
-
-# Fixtures normal_user, admin_user, normal_user_token_headers, admin_user_token_headers are imported from conftest.py
-
-
 @pytest.mark.asyncio
 async def test_successful_login(client: AsyncClient, normal_user: User):
     login_data = {"username": normal_user.username, "password": "password123"}
@@ -76,36 +69,30 @@ async def test_failed_login_non_existent_user(client: AsyncClient):
     assert response.status_code == 401  # As per HTTPException in login endpoint
 
 
-# Tests for basic protected route access (GET /api/v1/users/)
+# Tests for basic protected route access (e.g. GET /api/v1/users/me)
+# The original tests targeted GET /api/v1/users/ which has been removed.
+# New tests can be added here for /me or other protected routes if desired.
+
+
+# For example, testing /api/v1/users/me:
+@pytest.mark.asyncio
+async def test_me_route_access_denied_no_token(client: AsyncClient):
+    response = await client.get("/api/v1/users/me")
+    assert response.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_protected_route_access_denied_no_token(client: AsyncClient):
-    response = await client.get("/api/v1/users/")
-    assert response.status_code == 401  # FastAPI's OAuth2PasswordBearer default
-
-
-@pytest.mark.asyncio
-async def test_protected_route_access_denied_invalid_token(client: AsyncClient):
+async def test_me_route_access_denied_invalid_token(client: AsyncClient):
     headers = {"Authorization": "Bearer invalidtokenstring"}
-    response = await client.get("/api/v1/users/", headers=headers)
-    assert response.status_code == 401  # JWT decode error leads to 401
+    response = await client.get("/api/v1/users/me", headers=headers)
+    assert response.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_protected_route_access_granted_admin_user(
-    client: AsyncClient, admin_user_token_headers: dict[str, str]
-):
-    # GET /api/v1/users/ is admin-only
-    response = await client.get("/api/v1/users/", headers=admin_user_token_headers)
-    assert response.status_code == 200
-
-
-@pytest.mark.asyncio
-async def test_protected_route_access_denied_normal_user_for_admin_route(
+async def test_me_route_access_granted_normal_user(
     client: AsyncClient, normal_user_token_headers: dict[str, str]
 ):
-    # GET /api/v1/users/ is admin-only
-    response = await client.get("/api/v1/users/", headers=normal_user_token_headers)
-    # This should be 403 Forbidden because the user is authenticated but not authorized (not admin)
-    assert response.status_code == 403
+    response = await client.get("/api/v1/users/me", headers=normal_user_token_headers)
+    assert response.status_code == 200
+    # Add more assertions based on expected response, e.g., username
+    # assert response.json()["username"] == "normaluser" # depends on fixture username
