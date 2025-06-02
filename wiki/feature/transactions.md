@@ -22,13 +22,12 @@ The core idea is to allow users to make a single transaction (e.g., a payment in
     *   `share_amount`: The amount this user owes for this expense, in the expense's currency.
     *   `settled_transaction_id` (Optional): The `id` of the transaction that was used to settle this participant's share. Initially null.
     *   `settled_amount_in_transaction_currency` (Optional): The portion of the linked transaction's amount (specified in `settled_transaction_id`) that was used to cover this specific `share_amount`. This is recorded in the currency of the transaction. Initially null.
-    *   `settled_currency_id` (or `settled_currency_code`) (Optional): The currency of the `settled_amount_in_transaction_currency`. This will match the currency of the linked transaction. Initially null.
 
 ## 3. Workflow Steps
 
 ### Step 1: Creating a Transaction
 
-A user initiates the creation of a transaction. This typically happens outside the direct context of settling a specific expense initially, or it could be done with the intent to settle immediately.
+A user initiates the creation of a transaction. This typically happens with the intent to settle immediately.
 
 *   **API Endpoint (Conceptual):** `POST /api/v1/transactions/`
 *   **Request Data:**
@@ -45,7 +44,7 @@ A user initiates the creation of a transaction. This typically happens outside t
 
 ### Step 2: Settling Expense Participations with a Transaction
 
-Once a transaction exists (or is being created as part of this flow), a user can allocate parts or all of that transaction to settle one or more of their expense participations.
+Once a transaction is being created as part of this flow, a user can allocate parts or all of that transaction to settle one or more of their expense participations.
 
 *   **API Endpoint (Conceptual):** `POST /api/v1/expenses/settle`
 *   **Request Data:**
@@ -82,7 +81,6 @@ Once a transaction exists (or is being created as part of this flow), a user can
         *   It updates the `ExpenseParticipant` record with:
             *   `settled_transaction_id` = `transaction_id` from the request.
             *   `settled_amount_in_transaction_currency` = `settled_amount` from the request item.
-            *   `settled_currency_id` = `settled_currency_id` from the request item.
 *   **Response Data (Conceptual):**
     *   A success message, potentially with details of the updated expense participations.
     *   Example:
@@ -95,15 +93,11 @@ Once a transaction exists (or is being created as part of this flow), a user can
               "expense_participant_id": 789,
               "settled_transaction_id": 123,
               "settled_amount_in_transaction_currency": 20.00,
-              "settled_currency_id": 1,
-              "status": "updated"
             },
             {
               "expense_participant_id": 790,
               "settled_transaction_id": 123,
               "settled_amount_in_transaction_currency": 30.00,
-              "settled_currency_id": 1,
-              "status": "updated"
             }
           ]
         }
@@ -117,24 +111,5 @@ Once a transaction exists (or is being created as part of this flow), a user can
     *   The `ExpenseParticipant.share_amount` is in the *expense's currency*.
     *   The `ExpenseParticipant.settled_amount_in_transaction_currency` is in the *transaction's currency*.
 *   **Currency Conversion:** The actual conversion logic (e.g., how much of "Transaction Currency X" is needed to satisfy "Expense Share Amount Y in Currency Z") is **out of scope for this initial definition**. The system will, for now, only record the amount of the transaction currency that the user *states* was used for the settlement. The user (or a future system feature) is responsible for determining this `settled_amount`.
-
-## 5. API Impact (Summary for `openapi.json`)
-
-*   **New Schemas:**
-    *   `TransactionCreate`
-    *   `TransactionRead`
-    *   `ExpenseParticipantSettlementInfo` (for the settlement request)
-    *   `SettleExpensesRequest` (for the settlement request)
-    *   `SettlementResult` (for the settlement response)
-*   **New Endpoints:**
-    *   `POST /api/v1/transactions/` (Create Transaction)
-    *   `GET /api/v1/transactions/{transaction_id}` (Get Transaction)
-    *   `POST /api/v1/expenses/settle` (Settle Expense Participations)
-*   **Schema Updates:**
-    *   `ExpenseParticipantRead` (and `ExpenseParticipantReadWithUser` within `ExpenseRead`) will need to include:
-        *   `settled_transaction_id: Optional[int]`
-        *   `settled_amount_in_transaction_currency: Optional[float]`
-        *   `settled_currency_id: Optional[int]` (or `settled_currency_code: Optional[str]`)
-        *   `settled_currency: Optional[CurrencyRead]` (if using ID)
 
 This workflow provides the foundation for tracking payments and linking them to specific expense shares, even when currencies differ, by explicitly recording the amount from the transaction used for settlement.

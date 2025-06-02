@@ -13,7 +13,9 @@ from src.models.models import (
     ExpenseParticipant,
     Currency,
     Transaction,  # Ensure Transaction is imported
+    ConversionRate,
 )
+from datetime import datetime
 from src.models import schemas
 from src.core.security import get_current_user
 from src.utils import get_object_or_404
@@ -262,6 +264,262 @@ async def read_expense_endpoint(
         )
 
     return await _get_expense_read_details(session=session, db_expense=db_expense)
+
+
+@router.get(
+    "/settlement-details/expense/{expense_id}/currency/{target_currency_id}",
+    response_model=schemas.ExpenseSettlementDetails,
+    summary="Get Settlement Details for a Specific Expense Share",
+)
+async def get_expense_settlement_details(
+    *,
+    session: AsyncSession = Depends(get_session),
+    expense_id: int,
+    target_currency_id: int,
+    current_user: User = Depends(get_current_user),
+) -> schemas.ExpenseSettlementDetails:
+    """
+    Provides details for settling the current user's share of a specific expense
+    in a target currency. It includes the original share, target currency, 
+    conversion rate used (if applicable), and the converted amount.
+    """
+    # Fetch Expense with its currency
+    db_expense = await session.get(
+        Expense,
+        expense_id,
+        options=[selectinload(Expense.currency)]
+    )
+    if not db_expense:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expense not found")
+
+    target_currency = await get_object_or_404(session, Currency, target_currency_id, "Target currency not found")
+
+    # Find current user's participation in the expense
+    participant_stmt = (
+        select(ExpenseParticipant)
+        .where(ExpenseParticipant.expense_id == expense_id)
+        .where(ExpenseParticipant.user_id == current_user.id)
+        .options(
+            selectinload(ExpenseParticipant.transaction).selectinload(Transaction.currency),
+            selectinload(ExpenseParticipant.settled_conversion_rate)
+        )
+    )
+    result = await session.exec(participant_stmt)
+    participant = result.one_or_none()
+
+    if not participant:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Current user is not a participant in this expense.",
+        )
+
+    original_share_amount = participant.share_amount
+    original_currency_id = db_expense.currency_id
+    
+    converted_share_amount: Optional[float] = None
+    conversion_rate_used: Optional[float] = None
+    conversion_rate_timestamp: Optional[datetime] = None
+
+    if original_currency_id == target_currency_id:
+        converted_share_amount = original_share_amount
+    else:
+        # Fetch the latest conversion rate from original_currency to target_currency
+        rate_stmt = (
+            select(ConversionRate)
+            .where(ConversionRate.from_currency_id == original_currency_id)
+            .where(ConversionRate.to_currency_id == target_currency_id)
+            .order_by(ConversionRate.timestamp.desc())
+        )
+        rate_result = await session.exec(rate_stmt)
+        latest_rate = rate_result.first()
+
+        if not latest_rate:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No conversion rate found from currency {original_currency_id} to {target_currency_id}"
+            )
+        
+        conversion_rate_used = latest_rate.rate
+        conversion_rate_timestamp = latest_rate.timestamp
+        converted_share_amount = round(original_share_amount * conversion_rate_used, 2) # Assuming 2 decimal places for currency
+
+    settled_details_schema: Optional[schemas.SettledParticipationDetail] = None
+    is_already_settled = participant.settled_transaction_id is not None
+
+    if is_already_settled and participant.transaction:
+        settled_currency_for_schema = None
+        if participant.transaction.currency:
+             settled_currency_for_schema = schemas.CurrencyRead.model_validate(participant.transaction.currency)
+
+        settled_conversion_rate_details = None
+        if participant.settled_conversion_rate:
+            settled_conversion_rate_details = schemas.ConversionRateRead.model_validate(participant.settled_conversion_rate)
+
+        settled_details_schema = schemas.SettledParticipationDetail(
+            settled_transaction_id=participant.settled_transaction_id,
+            settled_amount_in_transaction_currency=participant.settled_amount_in_transaction_currency,
+            settled_in_currency_id=participant.transaction.currency_id,
+            settled_in_currency=settled_currency_for_schema,
+            settled_with_conversion_rate_id=participant.settled_with_conversion_rate_id,
+            settled_at_conversion_timestamp=participant.settled_at_conversion_timestamp,
+            settled_conversion_rate=settled_conversion_rate_details
+        )
+
+    return schemas.ExpenseSettlementDetails(
+        expense_id=expense_id,
+        participant_user_id=current_user.id,
+        original_share_amount=original_share_amount,
+        original_currency_id=original_currency_id,
+        original_currency=schemas.CurrencyRead.model_validate(db_expense.currency),
+        target_currency_id=target_currency_id,
+        target_currency=schemas.CurrencyRead.model_validate(target_currency),
+        conversion_rate_used=conversion_rate_used,
+        conversion_rate_timestamp=conversion_rate_timestamp,
+        converted_share_amount=converted_share_amount,
+        is_already_settled=is_already_settled,
+        settled_details=settled_details_schema
+    )
+
+
+@router.get(
+    "/settlement-details/group/{group_id}/currency/{target_currency_id}",
+    response_model=schemas.GroupSettlementDetails,
+    summary="Get Settlement Details for User's Net Balances in a Group",
+)
+async def get_group_settlement_details(
+    *,
+    session: AsyncSession = Depends(get_session),
+    group_id: int,
+    target_currency_id: int,
+    current_user: User = Depends(get_current_user),
+) -> schemas.GroupSettlementDetails:
+    """
+    Calculates the net balance of the current user with every other member 
+    in the specified group, presented in the target currency. 
+    This involves summing up all unsettled shares.
+    """
+    group = await session.get(Group, group_id, options=[selectinload(Group.members), selectinload(Group.expenses).selectinload(Expense.all_participant_details).selectinload(ExpenseParticipant.user), selectinload(Group.expenses).selectinload(Expense.currency)])
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
+
+    if not any(member.id == current_user.id for member in group.members):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User not a member of this group")
+
+    target_currency_model = await get_object_or_404(session, Currency, target_currency_id, "Target currency not found")
+
+    net_balances: List[schemas.NetBalanceItem] = []
+
+    other_members = [member for member in group.members if member.id != current_user.id]
+
+    for other_member in other_members:
+        # For each other_member, calculate how much current_user owes them and how much they owe current_user
+        # This will be aggregated across all UNSETTLED participations in SHARED expenses within this group.
+        
+        # We need to iterate through expenses in the group, then their participants.
+        # An ExpenseParticipant links a user to an expense with a share_amount.
+        # If ExpenseParticipant.settled_transaction_id is None, it's unsettled.
+
+        # Positive amount means current_user owes other_member
+        # Negative amount means other_member owes current_user
+        # All amounts are first calculated in their original currency and then converted to target_currency.
+        # For simplicity in this example, we'll assume direct conversion to target_currency for each share.
+        # A more robust solution might sum by original currency first, then convert.
+
+        current_user_owes_other_member_in_target_currency = 0.0
+        other_member_owes_current_user_in_target_currency = 0.0
+
+        for expense in group.expenses:
+            # Check if both current_user and other_member are participants in this expense
+            current_user_participation = None
+            other_member_participation = None
+            
+            for p in expense.all_participant_details:
+                if p.user_id == current_user.id and p.settled_transaction_id is None:
+                    current_user_participation = p
+                elif p.user_id == other_member.id and p.settled_transaction_id is None:
+                    other_member_participation = p
+            
+            # Scenario 1: Expense paid by current_user, other_member is a participant and owes current_user
+            if expense.paid_by_user_id == current_user.id and other_member_participation:
+                amount_to_convert = other_member_participation.share_amount
+                original_expense_currency_id = expense.currency_id
+                
+                converted_amount = await _convert_amount(
+                    session, amount_to_convert, original_expense_currency_id, target_currency_id
+                )
+                other_member_owes_current_user_in_target_currency += converted_amount
+
+            # Scenario 2: Expense paid by other_member, current_user is a participant and owes other_member
+            elif expense.paid_by_user_id == other_member.id and current_user_participation:
+                amount_to_convert = current_user_participation.share_amount
+                original_expense_currency_id = expense.currency_id
+                
+                converted_amount = await _convert_amount(
+                    session, amount_to_convert, original_expense_currency_id, target_currency_id
+                )
+                current_user_owes_other_member_in_target_currency += converted_amount
+            
+            # Scenario 3: Expense paid by a third party (or group itself if that's a feature)
+            # Both current_user and other_member are participants and owe their shares to the payer.
+            # This logic focuses on direct balances between current_user and other_member, 
+            # so if they both owe a third party, it doesn't create a direct debt between them for *this* expense part.
+            # However, if the system implies that all group expenses create debts between members relative to who paid,
+            # this part might need adjustment. The current simplified model assumes direct payer-participant debt.
+
+        net_amount_in_target_currency = round(current_user_owes_other_member_in_target_currency - other_member_owes_current_user_in_target_currency, 2)
+
+        if net_amount_in_target_currency != 0:
+            net_balances.append(schemas.NetBalanceItem(
+                with_user_id=other_member.id,
+                with_user=schemas.UserRead.model_validate(other_member),
+                amount=net_amount_in_target_currency,
+                currency_id=target_currency_id,
+                currency=schemas.CurrencyRead.model_validate(target_currency_model)
+            ))
+
+    return schemas.GroupSettlementDetails(
+        group_id=group_id,
+        current_user_id=current_user.id,
+        target_currency_id=target_currency_id,
+        target_currency=schemas.CurrencyRead.model_validate(target_currency_model),
+        net_balances=net_balances
+    )
+
+
+async def _convert_amount(session: AsyncSession, amount: float, from_currency_id: int, to_currency_id: int) -> float:
+    if from_currency_id == to_currency_id:
+        return amount
+    
+    rate_stmt = (
+        select(ConversionRate)
+        .where(ConversionRate.from_currency_id == from_currency_id)
+        .where(ConversionRate.to_currency_id == to_currency_id)
+        .order_by(ConversionRate.timestamp.desc())
+    )
+    rate_result = await session.exec(rate_stmt)
+    latest_rate = rate_result.first()
+
+    if not latest_rate:
+        # Attempt reverse conversion if direct rate not found
+        reverse_rate_stmt = (
+            select(ConversionRate)
+            .where(ConversionRate.from_currency_id == to_currency_id)
+            .where(ConversionRate.to_currency_id == from_currency_id)
+            .order_by(ConversionRate.timestamp.desc())
+        )
+        reverse_rate_result = await session.exec(reverse_rate_stmt)
+        latest_reverse_rate = reverse_rate_result.first()
+        if latest_reverse_rate and latest_reverse_rate.rate != 0:
+            return round(amount / latest_reverse_rate.rate, 2)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No conversion rate found between currency {from_currency_id} and {to_currency_id}, or its reverse."
+            )
+    return round(amount * latest_rate.rate, 2)
+
+
+# TODO:  audit/test this properly
 
 
 # TODO:  audit/test this properly
