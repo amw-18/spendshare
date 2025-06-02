@@ -152,15 +152,13 @@ async def read_expenses_endpoint(
     statement = select(Expense).options(*base_options)
 
     if user_id:
-        if not current_user.is_admin:
-            # Non-admin users can only fetch their own expenses
-            if user_id != current_user.id:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Not enough permissions to fetch expenses for another user",
-                )
-        # At this point, either user is admin, or user_id matches current_user.id
-        # Filter for expenses where the specified user_id is payer or participant.
+        # Users can only fetch their own expenses when user_id is provided
+        if user_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not enough permissions to fetch expenses for another user. You can only fetch your own.",
+            )
+        # Filter for expenses where the specified user_id (which is current_user.id) is payer or participant.
         statement = (
             statement.outerjoin(
                 ExpenseParticipant,
@@ -180,25 +178,22 @@ async def read_expenses_endpoint(
             statement.where(Expense.group_id == group_id).offset(skip).limit(limit)
         )
     else:  # No user_id or group_id provided
-        if not current_user.is_admin:
-            # Non-admin users see their own expenses
-            statement = (
-                statement.outerjoin(
-                    ExpenseParticipant,
-                    Expense.id == ExpenseParticipant.expense_id,
-                )
-                .where(
-                    or_(
-                        Expense.paid_by_user_id == current_user.id,
-                        ExpenseParticipant.user_id == current_user.id,
-                    )
-                )
-                .offset(skip)
-                .limit(limit)
+        # All users (admins or not) see their own expenses if no specific user_id or group_id is given
+        statement = (
+            statement.outerjoin(
+                ExpenseParticipant,
+                Expense.id == ExpenseParticipant.expense_id,
             )
-        else:
-            # Admin users see all expenses
-            statement = statement.offset(skip).limit(limit)
+            .where(
+                or_(
+                    Expense.paid_by_user_id == current_user.id,  # User is payer
+                    ExpenseParticipant.user_id == current_user.id,  # User is participant
+                )
+            )
+            .offset(skip)
+            .limit(limit)
+        )
+        # Admin-specific view for all expenses removed.
 
     result = await session.exec(statement)
     # Use .unique().all() to avoid duplicate Expense rows if outerjoin produces them
@@ -237,16 +232,15 @@ async def read_expense_endpoint(
             status_code=status.HTTP_404_NOT_FOUND, detail="Expense not found"
         )
 
-    if not current_user.is_admin and db_expense.paid_by_user_id != current_user.id:
-        found = False
-        # Authorization check: current_user must be admin, payer, or one of the participants.
-        # db_expense.participants should be loaded with their user and transaction details.
-        is_participant = any(p.id == current_user.id for p in db_expense.participants)
-        if not is_participant:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not authorized to view this expense",
-            )
+    # Authorization check: current_user must be the payer or one of the participants.
+    is_payer = db_expense.paid_by_user_id == current_user.id
+    is_participant = any(p.id == current_user.id for p in db_expense.participants)
+
+    if not (is_payer or is_participant):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to view this expense",
+        )
 
     return await _get_expense_read_details(session=session, db_expense=db_expense)
 
@@ -610,10 +604,11 @@ async def delete_expense_endpoint(
 ) -> int:
     db_expense = await get_object_or_404(session, Expense, expense_id)
 
-    if not current_user.is_admin and db_expense.paid_by_user_id != current_user.id:
+    # Only the payer of the expense can delete it.
+    if db_expense.paid_by_user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to delete this expense",
+            detail="Not authorized to delete this expense. Only the payer can delete.",
         )
 
     await session.delete(

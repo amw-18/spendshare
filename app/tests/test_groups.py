@@ -100,7 +100,7 @@ async def test_read_group_authorization(
     response_admin_view = await client.get(
         f"/api/v1/groups/{group_id}", headers=admin_user_token_headers
     )
-    assert response_admin_view.status_code == status.HTTP_200_OK
+    assert response_admin_view.status_code == status.HTTP_403_FORBIDDEN # Changed: Admin is not creator or member
 
     # Test: Non-member/non-creator/non-admin (other_user) cannot view (403)
     response_other_view_non_member = await client.get(
@@ -108,10 +108,10 @@ async def test_read_group_authorization(
     )
     assert response_other_view_non_member.status_code == status.HTTP_403_FORBIDDEN
 
-    # Setup: Add other_user to the group (admin or creator can do this, use admin for simplicity)
+    # Setup: Add other_user to the group (creator normal_user should do this)
     add_member_response = await client.post(
         f"/api/v1/groups/{group_id}/members/{other_user_id}",
-        headers=admin_user_token_headers,
+        headers=normal_user_token_headers, # Changed: Creator (normal_user) adds member
     )
     assert add_member_response.status_code == status.HTTP_200_OK
 
@@ -174,14 +174,14 @@ async def test_delete_group_authorization(
 
     response_admin_delete = await client.delete(
         f"/api/v1/groups/{group_id_admin_del}", headers=admin_user_token_headers
-    )  # admin deletes
-    assert response_admin_delete.status_code == status.HTTP_200_OK
+    )  # admin tries to delete
+    assert response_admin_delete.status_code == status.HTTP_403_FORBIDDEN # Changed: Admin cannot delete group not created by them
 
-    # Verify deletion by trying to get the group with the creator's token
-    response_get_after_admin_delete = await client.get(
+    # Verify group still exists (since admin delete failed) by having creator try to get it
+    response_get_after_admin_delete_attempt = await client.get(
         f"/api/v1/groups/{group_id_admin_del}", headers=normal_user_token_headers
     )  # normal_user (creator) tries to get
-    assert response_get_after_admin_delete.status_code == status.HTTP_404_NOT_FOUND
+    assert response_get_after_admin_delete_attempt.status_code == status.HTTP_200_OK # Group should still exist
 
     # Test: Other user (non-creator/non-admin) cannot delete
     group_data_other_del = {"name": "Group For Other User Delete Test"}

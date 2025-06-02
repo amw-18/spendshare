@@ -80,7 +80,8 @@ async def read_transaction( # Added async
         )
 
     # Authorization check
-    if transaction.created_by_user_id != current_user.id and not current_user.is_admin:
+    # If the current user is not the creator, they must be a participant in an expense settled by this transaction.
+    if transaction.created_by_user_id != current_user.id:
         # Check if user is a participant in an expense settled by this transaction
         participant_link_stmt = (
             select(ExpenseParticipant)

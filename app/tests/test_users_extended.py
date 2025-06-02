@@ -59,17 +59,18 @@ async def test_token_expiry(client: AsyncClient):
     token = token_response.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
-    # Use token immediately (should work)
-    response = await client.get("/api/v1/users/", headers=headers)
-    # Note: This should actually return 403 for non-admin users trying to list all users
-    assert response.status_code == status.HTTP_403_FORBIDDEN
+    # Use token immediately (should work for /me endpoint)
+    response = await client.get("/api/v1/users/me", headers=headers)
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["username"] == user_data["username"]
 
     # Note: In a real test environment, we'd need a way to fast-forward time
-    # or configure shorter token expiry for testing
-    # This is a placeholder to show the concept
-    # time.sleep(token_expiry_time)
-    # response = await client.get("/api/v1/users/", headers=headers)
-    # assert response.status_code == status.HTTP_401_UNAUTHORIZED
+    # or configure shorter token expiry for testing.
+    # This part remains a conceptual placeholder.
+    # Assuming time has passed and token expired:
+    # e.g. time.sleep(ACCESS_TOKEN_EXPIRE_MINUTES * 60 + 1)
+    # response_expired = await client.get("/api/v1/users/me", headers=headers)
+    # assert response_expired.status_code == status.HTTP_401_UNAUTHORIZED
 
 
 @pytest.mark.asyncio
@@ -125,37 +126,6 @@ async def test_username_format_validation(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_user_listing_pagination(
-    client: AsyncClient, admin_user_token_headers: dict[str, str]
-):
-    """Test user listing pagination"""
-    # Create multiple users
-    for i in range(5):
-        user_data = {
-            "username": f"page_user_{i}",
-            "email": f"page{i}@example.com",
-            "password": "testpass123",
-        }
-        await client.post("/api/v1/users/", json=user_data)
-
-    # Test with limit
-    response = await client.get(
-        "/api/v1/users/?limit=2", headers=admin_user_token_headers
-    )
-    assert response.status_code == status.HTTP_200_OK
-    users = response.json()
-    assert len(users) == 2
-
-    # Test with skip
-    response = await client.get(
-        "/api/v1/users/?skip=2&limit=2", headers=admin_user_token_headers
-    )
-    assert response.status_code == status.HTTP_200_OK
-    users = response.json()
-    assert len(users) == 2
-
-
-@pytest.mark.asyncio
 async def test_password_update_validation(
     client: AsyncClient, normal_user_token_headers: dict[str, str], normal_user: Any
 ):
@@ -188,37 +158,40 @@ async def test_password_update_validation(
 async def test_concurrent_user_updates(
     client: AsyncClient,
     normal_user_token_headers: dict[str, str],
-    admin_user_token_headers: dict[str, str],
+    # admin_user_token_headers: dict[str, str], # Removed
     normal_user: User,
 ):
-    """Test handling of concurrent updates to the same user"""
-    # Simulate two concurrent updates
-    update_data1 = {"username": "new_name1"}
-    update_data2 = {"username": "new_name2"}
+    """Test handling of concurrent updates to the same user (email field)"""
+    # Simulate two concurrent updates to email
+    update_data1 = {"email": "new_email1@example.com"}
+    update_data2 = {"email": "new_email2@example.com"}
 
     # Send updates nearly simultaneously
+    # Note: True concurrency is hard to guarantee in tests like this.
+    # This will mostly test if the endpoint can handle rapid sequential updates.
     response1 = await client.put(
-        f"/api/v1/users/{normal_user.id}",
+        f"/api/v1/users/{normal_user.id}", # Update by ID
         json=update_data1,
         headers=normal_user_token_headers,
     )
     response2 = await client.put(
-        f"/api/v1/users/{normal_user.id}",
+        f"/api/v1/users/{normal_user.id}", # Update by ID
         json=update_data2,
         headers=normal_user_token_headers,
     )
 
-    # At least one should succeed
+    # At least one should succeed (or both, if the last one wins)
     assert (
         response1.status_code == status.HTTP_200_OK
         or response2.status_code == status.HTTP_200_OK
     )
 
-    # Check final state
-    # Use admin headers to avoid issues with normal_user's token if username changed
+    # Check final state using the /me endpoint with the original token
+    # This assumes the email update doesn't invalidate the token immediately
+    # and that the user is still logged in with the same session.
     response = await client.get(
-        f"/api/v1/users/{normal_user.id}", headers=admin_user_token_headers
+        "/api/v1/users/me", headers=normal_user_token_headers
     )
     assert response.status_code == status.HTTP_200_OK
     final_data = response.json()
-    assert final_data["username"] in ["new_name1", "new_name2"]
+    assert final_data["email"] in [update_data1["email"], update_data2["email"]]

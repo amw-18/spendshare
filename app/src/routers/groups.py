@@ -78,19 +78,18 @@ async def read_group_endpoint(
 ) -> Group:
     db_group = await get_object_or_404(session, Group, group_id)
 
-    # If the current user is not an admin, then check for ownership or membership
-    if not current_user.is_admin:
-        if db_group.created_by_user_id != current_user.id:
-            # Check if current_user is a member of the group
-            link_exists_statement = select(UserGroupLink).where(
-                UserGroupLink.group_id == group_id, UserGroupLink.user_id == current_user.id
+    # Authorization: User must be the creator or a member to view the group.
+    if db_group.created_by_user_id != current_user.id:
+        # Check if current_user is a member of the group
+        link_exists_statement = select(UserGroupLink).where(
+            UserGroupLink.group_id == group_id, UserGroupLink.user_id == current_user.id
+        )
+        result = await session.exec(link_exists_statement)
+        if not result.first():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to view this group",
             )
-            result = await session.exec(link_exists_statement)
-            if not result.first():
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Not authorized to view this group",
-                )
     return db_group
 
 
@@ -134,11 +133,11 @@ async def delete_group_endpoint(
     current_user: User = Depends(get_current_user),
 ) -> int:
     db_group = await get_object_or_404(session, Group, group_id)
-    # Authorization: Only group creator or admin can delete
-    if db_group.created_by_user_id != current_user.id and not current_user.is_admin:
+    # Authorization: Only group creator can delete
+    if db_group.created_by_user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to delete this group",
+            detail="Not authorized to delete this group. Only the creator can delete.",
         )
 
     await session.delete(db_group)
@@ -160,8 +159,8 @@ async def add_group_member_endpoint(
     # check existence of user
     await get_object_or_404(session, User, user_id)
 
-    # Authorization: Only group creator or admin can add members
-    if db_group.created_by_user_id != current_user.id and not current_user.is_admin:
+    # Authorization: Only group creator can add members
+    if db_group.created_by_user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to add members to this group",

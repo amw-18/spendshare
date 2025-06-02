@@ -46,14 +46,12 @@ class UserCreate(UserBase):
 
 class UserRead(UserBase):
     id: int
-    is_admin: bool
 
 
 class UserUpdate(SQLModel):
     username: Optional[str] = None
     email: Optional[EmailStr] = None
     password: Optional[constr(min_length=8)] = None
-    is_admin: Optional[bool] = None
 
     @field_validator("password")
     @classmethod
