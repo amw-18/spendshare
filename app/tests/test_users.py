@@ -18,7 +18,6 @@ async def test_create_user_success(client: AsyncClient):
     assert data["username"] == user_data["username"]
     assert "id" in data
     assert "hashed_password" not in data  # Ensure password is not returned
-    assert "is_admin" not in data # Ensure is_admin is not returned
 
     # Login as the created user
     login_data = {"username": user_data["username"], "password": user_data["password"]}
@@ -80,21 +79,16 @@ async def test_create_user_duplicate_username(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_read_user_not_found(
-    client: AsyncClient, normal_user_token_headers: dict[str, str] # Changed
+    client: AsyncClient,
+    normal_user_token_headers: dict[str, str],  # Changed
 ):
     response = await client.get(
-        "/api/v1/users/99999", headers=normal_user_token_headers # Changed
+        "/api/v1/users/99999",
+        headers=normal_user_token_headers,  # Changed
     )  # Non-existent user ID
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
-# --- START AUTHENTICATION/AUTHORIZATION TESTS ---
-# Fixtures normal_user, admin_user, normal_user_token_headers, admin_user_token_headers are from conftest.py
-
-
-# Helper function to create a user (can be moved to conftest if used by many test files)
-# This helper is defined in other test files, ensure it's available or redefine.
-# For now, assuming it's accessible or will be defined if needed.
 async def create_test_user_for_auth(
     client: AsyncClient, username: str, email: str, password: str = "password123"
 ) -> dict:
@@ -132,7 +126,6 @@ async def test_update_own_user_details(
     )
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["email"] == update_data["email"]
-    assert "is_admin" not in response.json()
 
 
 @pytest.mark.asyncio
@@ -156,24 +149,6 @@ async def test_normal_user_cannot_update_other_user(
         headers=normal_user_token_headers,
     )
     assert response.status_code == status.HTTP_403_FORBIDDEN
-
-
-@pytest.mark.asyncio
-async def test_normal_user_cannot_make_self_admin( # Test remains relevant
-    client: AsyncClient, normal_user_token_headers: dict[str, str], normal_user: User
-):
-    # User trying to set is_admin to True for themselves
-    update_data = {"is_admin": True}
-    response = await client.put(
-        f"/api/v1/users/{normal_user.id}", # Use normal_user.id
-        json=update_data,
-        headers=normal_user_token_headers,
-    )
-    assert response.status_code == status.HTTP_200_OK # The request is successful, but is_admin is ignored
-    # The user is not made admin because UserUpdate schema doesn't have is_admin,
-    # and the User model itself doesn't have is_admin.
-    # We can also check that the response does not contain is_admin.
-    assert "is_admin" not in response.json()
 
 
 # User Delete Authorization Tests
@@ -217,19 +192,6 @@ async def test_normal_user_cannot_delete_other_user(
     )
     assert response.status_code == status.HTTP_403_FORBIDDEN
 
-
-# The original tests for creating users (test_create_user_success, etc.) are still valid as user creation is public.
-# The original tests for reading/updating/deleting specific users without auth tokens (e.g., test_read_user_not_found)
-# should now fail with 401 if they target protected endpoints, or be adapted if they are still relevant
-# (e.g., testing 404 for a non-existent user with an admin token).
-# For example, test_read_user_not_found should now use normal_user_token_headers.
-
-# All tests below this line are effectively removed by this diff if they were part of the search block.
-# This includes:
-# - test_read_user_not_found_authed
-# - test_read_users_with_data_authed
-# - All Admin Impersonation Tests
-# - test_read_users_with_data (the second one)
 
 @pytest.mark.asyncio
 async def test_update_user_success(client: AsyncClient):
@@ -279,16 +241,18 @@ async def test_update_user_success(client: AsyncClient):
     )  # Use new headers
     assert get_response.status_code == status.HTTP_200_OK
     assert get_response.json()["username"] == update_data["username"]
-    assert "is_admin" not in get_response.json()
 
 
 @pytest.mark.asyncio
 async def test_update_user_not_found(
-    client: AsyncClient, normal_user_token_headers: dict[str, str] # Changed
+    client: AsyncClient,
+    normal_user_token_headers: dict[str, str],  # Changed
 ):
     update_data = {"username": "ghost_updater"}
     response = await client.put(
-        "/api/v1/users/99999", json=update_data, headers=normal_user_token_headers # Changed
+        "/api/v1/users/99999",
+        json=update_data,
+        headers=normal_user_token_headers,  # Changed
     )  # Non-existent user ID
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
@@ -332,7 +296,10 @@ async def test_update_user_email_conflict(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_delete_user_success(
-    client: AsyncClient, normal_user_token_headers: dict[str, str] # Added normal_user_token_headers for verification
+    client: AsyncClient,
+    normal_user_token_headers: dict[
+        str, str
+    ],  # Added normal_user_token_headers for verification
 ):
     # Create user to be deleted
     user_data = {
@@ -345,32 +312,44 @@ async def test_delete_user_success(
     user_id = create_response.json()["id"]
 
     # Get auth token for the created user ("to_be_deleted")
-    login_data_tobedeleted = {"username": user_data["username"], "password": user_data["password"]}
-    login_response_tobedeleted = await client.post("/api/v1/users/token", data=login_data_tobedeleted)
+    login_data_tobedeleted = {
+        "username": user_data["username"],
+        "password": user_data["password"],
+    }
+    login_response_tobedeleted = await client.post(
+        "/api/v1/users/token", data=login_data_tobedeleted
+    )
     assert login_response_tobedeleted.status_code == status.HTTP_200_OK
     token_tobedeleted = login_response_tobedeleted.json()["access_token"]
     headers_tobedeleted = {"Authorization": f"Bearer {token_tobedeleted}"}
 
     # Delete user with their own token
-    delete_response = await client.delete(f"/api/v1/users/{user_id}", headers=headers_tobedeleted)
+    delete_response = await client.delete(
+        f"/api/v1/users/{user_id}", headers=headers_tobedeleted
+    )
     assert delete_response.status_code == status.HTTP_200_OK
 
     # Verify user's token is now invalid
-    get_response_after_delete = await client.get(f"/api/v1/users/{user_id}", headers=headers_tobedeleted)
+    get_response_after_delete = await client.get(
+        f"/api/v1/users/{user_id}", headers=headers_tobedeleted
+    )
     assert get_response_after_delete.status_code == status.HTTP_401_UNAUTHORIZED
 
     # Verify user is actually deleted using another authenticated user's token
     get_response_with_other_user = await client.get(
-        f"/api/v1/users/{user_id}", headers=normal_user_token_headers # normal_user is presumably different
+        f"/api/v1/users/{user_id}",
+        headers=normal_user_token_headers,  # normal_user is presumably different
     )
     assert get_response_with_other_user.status_code == status.HTTP_404_NOT_FOUND
 
 
 @pytest.mark.asyncio
 async def test_delete_user_not_found(
-    client: AsyncClient, normal_user_token_headers: dict[str, str] # Changed
+    client: AsyncClient,
+    normal_user_token_headers: dict[str, str],  # Changed
 ):
     response = await client.delete(
-        "/api/v1/users/99999", headers=normal_user_token_headers # Changed
+        "/api/v1/users/99999",
+        headers=normal_user_token_headers,  # Changed
     )  # Non-existent user ID
     assert response.status_code == status.HTTP_404_NOT_FOUND

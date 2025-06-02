@@ -45,13 +45,6 @@ def test_get_password_hash_empty_password():
     assert verify_password(password, hashed_password)
 
 
-# Note: Since these are not async functions, the tests don't need @pytest.mark.asyncio
-# If JWT token functions were added to security.py and they were async,
-# their tests would need the asyncio marker.
-
-# Fixtures normal_user, admin_user, normal_user_token_headers, admin_user_token_headers are imported from conftest.py
-
-
 @pytest.mark.asyncio
 async def test_successful_login(client: AsyncClient, normal_user: User):
     login_data = {"username": normal_user.username, "password": "password123"}
@@ -80,17 +73,20 @@ async def test_failed_login_non_existent_user(client: AsyncClient):
 # The original tests targeted GET /api/v1/users/ which has been removed.
 # New tests can be added here for /me or other protected routes if desired.
 
+
 # For example, testing /api/v1/users/me:
 @pytest.mark.asyncio
 async def test_me_route_access_denied_no_token(client: AsyncClient):
     response = await client.get("/api/v1/users/me")
     assert response.status_code == 401
 
+
 @pytest.mark.asyncio
 async def test_me_route_access_denied_invalid_token(client: AsyncClient):
     headers = {"Authorization": "Bearer invalidtokenstring"}
     response = await client.get("/api/v1/users/me", headers=headers)
     assert response.status_code == 401
+
 
 @pytest.mark.asyncio
 async def test_me_route_access_granted_normal_user(

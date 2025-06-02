@@ -12,7 +12,7 @@ from src.models.models import (
     Group,
     ExpenseParticipant,
     Currency,
-    Transaction, # Ensure Transaction is imported
+    Transaction,  # Ensure Transaction is imported
 )
 from src.models import schemas
 from src.core.security import get_current_user
@@ -24,7 +24,9 @@ router = APIRouter(
 )
 
 
-@router.post("/service/", response_model=schemas.ExpenseRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/service/", response_model=schemas.ExpenseRead, status_code=status.HTTP_201_CREATED
+)
 async def create_expense_with_participants_endpoint(
     *,
     session: AsyncSession = Depends(get_session),
@@ -69,7 +71,7 @@ async def create_expense_with_participants_endpoint(
         session.add(expense_participant)
 
     await session.commit()
-    await session.refresh(db_expense) # Refresh again after adding participants
+    await session.refresh(db_expense)  # Refresh again after adding participants
 
     # Re-fetch with relationships for ExpenseRead using a select statement
     stmt = (
@@ -79,20 +81,31 @@ async def create_expense_with_participants_endpoint(
             selectinload(Expense.currency),
             selectinload(Expense.paid_by),
             selectinload(Expense.group),
-            selectinload(Expense.all_participant_details).selectinload(ExpenseParticipant.user).selectinload(User.groups), # For UserRead in participant
-            selectinload(Expense.all_participant_details).selectinload(ExpenseParticipant.transaction).selectinload(Transaction.currency) # For settlement details
+            selectinload(Expense.all_participant_details)
+            .selectinload(ExpenseParticipant.user)
+            .selectinload(User.groups),  # For UserRead in participant
+            selectinload(Expense.all_participant_details)
+            .selectinload(ExpenseParticipant.transaction)
+            .selectinload(Transaction.currency),  # For settlement details
         )
     )
     result = await session.exec(stmt)
     refreshed_db_expense = result.one_or_none()
 
     if not refreshed_db_expense:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to re-fetch expense after creation with full details")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to re-fetch expense after creation with full details",
+        )
 
-    return await _get_expense_read_details(session=session, db_expense=refreshed_db_expense)
+    return await _get_expense_read_details(
+        session=session, db_expense=refreshed_db_expense
+    )
 
 
-@router.post("/", response_model=schemas.ExpenseRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/", response_model=schemas.ExpenseRead, status_code=status.HTTP_201_CREATED
+)
 async def create_expense_endpoint(
     *,
     session: AsyncSession = Depends(get_session),
@@ -116,20 +129,22 @@ async def create_expense_endpoint(
     stmt = (
         select(Expense)
         .where(Expense.id == db_expense.id)
-        .options(
-            selectinload(Expense.currency),
-            selectinload(Expense.paid_by)
-        )
+        .options(selectinload(Expense.currency), selectinload(Expense.paid_by))
     )
     result = await session.exec(stmt)
     refreshed_db_expense = result.one_or_none()
 
     if not refreshed_db_expense:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to re-fetch expense after creation with full details")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to re-fetch expense after creation with full details",
+        )
 
     # Manually construct and return ExpenseRead with participant_details
     # For simple creation, participants are not added here, so participant_details will be empty.
-    return await _get_expense_read_details(session=session, db_expense=refreshed_db_expense)
+    return await _get_expense_read_details(
+        session=session, db_expense=refreshed_db_expense
+    )
 
 
 @router.get("/", response_model=List[schemas.ExpenseRead])
@@ -147,7 +162,7 @@ async def read_expenses_endpoint(
     base_options = [
         selectinload(Expense.currency),
         selectinload(Expense.paid_by),
-        selectinload(Expense.group), # Ensure Group is loaded if group_id is present
+        selectinload(Expense.group),  # Ensure Group is loaded if group_id is present
     ]
     statement = select(Expense).options(*base_options)
 
@@ -178,7 +193,7 @@ async def read_expenses_endpoint(
             statement.where(Expense.group_id == group_id).offset(skip).limit(limit)
         )
     else:  # No user_id or group_id provided
-        # All users (admins or not) see their own expenses if no specific user_id or group_id is given
+        # All users see their own expenses if no specific user_id or group_id is given
         statement = (
             statement.outerjoin(
                 ExpenseParticipant,
@@ -187,13 +202,13 @@ async def read_expenses_endpoint(
             .where(
                 or_(
                     Expense.paid_by_user_id == current_user.id,  # User is payer
-                    ExpenseParticipant.user_id == current_user.id,  # User is participant
+                    ExpenseParticipant.user_id
+                    == current_user.id,  # User is participant
                 )
             )
             .offset(skip)
             .limit(limit)
         )
-        # Admin-specific view for all expenses removed.
 
     result = await session.exec(statement)
     # Use .unique().all() to avoid duplicate Expense rows if outerjoin produces them
@@ -202,7 +217,9 @@ async def read_expenses_endpoint(
     # Convert each Expense model to ExpenseRead schema using the helper
     expenses_read_list: List[schemas.ExpenseRead] = []
     for db_expense in expenses_db:
-        expenses_read_list.append(await _get_expense_read_details(session=session, db_expense=db_expense))
+        expenses_read_list.append(
+            await _get_expense_read_details(session=session, db_expense=db_expense)
+        )
     return expenses_read_list
 
 
@@ -220,7 +237,9 @@ async def read_expense_endpoint(
             selectinload(Expense.currency),
             selectinload(Expense.paid_by),
             selectinload(Expense.group),
-            selectinload(Expense.participants)  # Eagerly load participants for auth check
+            selectinload(
+                Expense.participants
+            ),  # Eagerly load participants for auth check
             # Participant details for response are handled by _get_expense_read_details
         )
     )
@@ -258,22 +277,24 @@ async def update_expense_endpoint(
     # if the expense is in group, any group member should be allowed
     # otherwise, only the participants    # Fetch the expense with eager loading for currency and paid_by
     db_expense = await session.get(
-        Expense, 
-        expense_id, 
+        Expense,
+        expense_id,
         options=[
             selectinload(Expense.currency),
             selectinload(Expense.paid_by),
             selectinload(Expense.group),
             selectinload(Expense.all_participant_details).options(
                 selectinload(ExpenseParticipant.user),
-                selectinload(ExpenseParticipant.transaction).selectinload(Transaction.currency)
-            )
-        ]
+                selectinload(ExpenseParticipant.transaction).selectinload(
+                    Transaction.currency
+                ),
+            ),
+        ],
     )
     if not db_expense:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Expense with id {expense_id} not found"
+            detail=f"Expense with id {expense_id} not found",
         )
     # Update basic expense fields first
     expense_data = expense_in.model_dump(exclude_unset=True)
@@ -404,21 +425,34 @@ async def update_expense_endpoint(
             selectinload(Expense.currency),
             selectinload(Expense.paid_by),
             selectinload(Expense.group),
-            selectinload(Expense.all_participant_details).options(selectinload(ExpenseParticipant.user).selectinload(User.groups)),
-            selectinload(Expense.all_participant_details).options(selectinload(ExpenseParticipant.transaction).selectinload(Transaction.currency))
+            selectinload(Expense.all_participant_details).options(
+                selectinload(ExpenseParticipant.user).selectinload(User.groups)
+            ),
+            selectinload(Expense.all_participant_details).options(
+                selectinload(ExpenseParticipant.transaction).selectinload(
+                    Transaction.currency
+                )
+            ),
         )
     )
     result = await session.exec(stmt)
     refreshed_db_expense = result.one_or_none()
 
     if not refreshed_db_expense:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to re-fetch expense after update with full details")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to re-fetch expense after update with full details",
+        )
 
     # Manually construct and return ExpenseRead with participant_details
-    return await _get_expense_read_details(session=session, db_expense=refreshed_db_expense)
+    return await _get_expense_read_details(
+        session=session, db_expense=refreshed_db_expense
+    )
 
 
-@router.post("/settle", response_model=schemas.SettlementResponse, status_code=status.HTTP_200_OK)
+@router.post(
+    "/settle", response_model=schemas.SettlementResponse, status_code=status.HTTP_200_OK
+)
 async def settle_expenses_endpoint(
     *,
     session: AsyncSession = Depends(get_session),
@@ -430,9 +464,11 @@ async def settle_expenses_endpoint(
     """
     # Retrieve the transaction
     transaction = await session.get(
-        Transaction, # Corrected to Transaction
+        Transaction,  # Corrected to Transaction
         settle_request.transaction_id,
-        options=[selectinload(Transaction.currency)] # Ensure currency is loaded if needed later, though not strictly for this logic
+        options=[
+            selectinload(Transaction.currency)
+        ],  # Ensure currency is loaded if needed later, though not strictly for this logic
     )
     if not transaction:
         raise HTTPException(
@@ -467,7 +503,7 @@ async def settle_expenses_endpoint(
         if item_check.expense_participant_id in seen_ep_ids_in_request:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Duplicate expense_participant_id {item_check.expense_participant_id} in settlement request."
+                detail=f"Duplicate expense_participant_id {item_check.expense_participant_id} in settlement request.",
             )
         seen_ep_ids_in_request.add(item_check.expense_participant_id)
 
@@ -475,14 +511,16 @@ async def settle_expenses_endpoint(
         # Explicit validation for settled_amount (Pydantic's gt=0 should also catch this)
         if item.settled_amount <= 0:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, 
-                detail=f"Settled amount for expense participant ID {item.expense_participant_id} must be positive."
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Settled amount for expense participant ID {item.expense_participant_id} must be positive.",
             )
 
         # Retrieve ExpenseParticipant by its own ID and eagerly load its parent Expense
         stmt_ep = (
             select(ExpenseParticipant)
-            .options(selectinload(ExpenseParticipant.expense))  # Eagerly load the parent expense
+            .options(
+                selectinload(ExpenseParticipant.expense)
+            )  # Eagerly load the parent expense
             .where(ExpenseParticipant.id == item.expense_participant_id)
         )
         result_ep = await session.exec(stmt_ep)
@@ -501,7 +539,7 @@ async def settle_expenses_endpoint(
             )
             continue
 
-        if not expense_participant.expense: # Should be loaded due to selectinload
+        if not expense_participant.expense:  # Should be loaded due to selectinload
             results.append(
                 schemas.SettlementResultItem(
                     expense_participant_id=item.expense_participant_id,
@@ -518,7 +556,9 @@ async def settle_expenses_endpoint(
         # The current_user (who created the transaction) can settle an ExpenseParticipant if:
         # 1. They are the payer of the original expense (expense_participant.expense.paid_by_user_id == current_user.id), OR
         # 2. The ExpenseParticipant record belongs to them (expense_participant.user_id == current_user.id).
-        is_original_payer = expense_participant.expense.paid_by_user_id == current_user.id
+        is_original_payer = (
+            expense_participant.expense.paid_by_user_id == current_user.id
+        )
         is_own_participation = expense_participant.user_id == current_user.id
 
         if not (is_original_payer or is_own_participation):
@@ -549,11 +589,14 @@ async def settle_expenses_endpoint(
             continue
 
         # Check if already settled by another transaction
-        if expense_participant.settled_transaction_id and expense_participant.settled_transaction_id != transaction.id:
+        if (
+            expense_participant.settled_transaction_id
+            and expense_participant.settled_transaction_id != transaction.id
+        ):
             results.append(
                 schemas.SettlementResultItem(
                     expense_participant_id=item.expense_participant_id,
-                    settled_transaction_id=transaction.id, # or original settled_transaction_id?
+                    settled_transaction_id=transaction.id,  # or original settled_transaction_id?
                     settled_amount_in_transaction_currency=item.settled_amount,
                     settled_currency_id=item.settled_currency_id,
                     status="Failed",
@@ -570,26 +613,28 @@ async def settle_expenses_endpoint(
         # For now, just update the ExpenseParticipant.
 
         session.add(expense_participant)
-        updated_participants_to_commit.append(expense_participant) # Keep track for commit
+        updated_participants_to_commit.append(
+            expense_participant
+        )  # Keep track for commit
 
         results.append(
             schemas.SettlementResultItem(
                 expense_participant_id=item.expense_participant_id,
                 settled_transaction_id=transaction.id,
                 settled_amount_in_transaction_currency=item.settled_amount,
-                settled_currency_id=transaction.currency_id, # Use transaction's currency ID
+                settled_currency_id=transaction.currency_id,  # Use transaction's currency ID
                 status="Success",
                 message="Settled successfully.",
             )
         )
 
-    if updated_participants_to_commit: # Only commit if there are successful updates
+    if updated_participants_to_commit:  # Only commit if there are successful updates
         await session.commit()
         for ep in updated_participants_to_commit:
-            await session.refresh(ep) # Refresh to get any DB-side updates if necessary
+            await session.refresh(ep)  # Refresh to get any DB-side updates if necessary
 
     return schemas.SettlementResponse(
-        status="Completed", # Or "PartiallyCompleted" if some failed
+        status="Completed",  # Or "PartiallyCompleted" if some failed
         message="Settlement process finished. Check individual item statuses.",
         updated_expense_participations=results,
     )
@@ -632,26 +677,41 @@ async def _get_expense_read_details(
         select(ExpenseParticipant)
         .where(ExpenseParticipant.expense_id == db_expense.id)
         .options(
-            selectinload(ExpenseParticipant.user).selectinload(User.groups), # User and their groups
-            selectinload(ExpenseParticipant.transaction).selectinload(Transaction.currency), # Transaction and its currency
+            selectinload(ExpenseParticipant.user).selectinload(
+                User.groups
+            ),  # User and their groups
+            selectinload(ExpenseParticipant.transaction).selectinload(
+                Transaction.currency
+            ),  # Transaction and its currency
         )
     )
     result = await session.exec(stmt)
-    participant_link_models = result.all() # These are ExpenseParticipant model instances
+    participant_link_models = (
+        result.all()
+    )  # These are ExpenseParticipant model instances
 
     participant_details_list = []
-    for participant_model in participant_link_models: # participant_model is an ExpenseParticipant
-        user_for_schema = schemas.UserRead.model_validate(participant_model.user) if participant_model.user else None
-        
+    for (
+        participant_model
+    ) in participant_link_models:  # participant_model is an ExpenseParticipant
+        user_for_schema = (
+            schemas.UserRead.model_validate(participant_model.user)
+            if participant_model.user
+            else None
+        )
+
         settled_currency_for_schema = None
         settled_currency_id_for_schema = None
         if participant_model.transaction and participant_model.transaction.currency:
-            settled_currency_for_schema = schemas.CurrencyRead.model_validate(participant_model.transaction.currency)
+            settled_currency_for_schema = schemas.CurrencyRead.model_validate(
+                participant_model.transaction.currency
+            )
             settled_currency_id_for_schema = participant_model.transaction.currency_id
-        elif participant_model.transaction: # Transaction exists but currency might not be loaded or set
-             # This case might indicate an issue if transaction.currency should always be there
+        elif (
+            participant_model.transaction
+        ):  # Transaction exists but currency might not be loaded or set
+            # This case might indicate an issue if transaction.currency should always be there
             pass
-
 
         participant_details_list.append(
             schemas.ExpenseParticipantReadWithUser(
@@ -669,8 +729,16 @@ async def _get_expense_read_details(
 
     # Ensure db_expense.currency and db_expense.paid_by are loaded by the CALLER of _get_expense_read_details
     # These should have been loaded by the options in the calling endpoint (e.g., read_expense_endpoint)
-    paid_by_user_for_schema = schemas.UserRead.model_validate(db_expense.paid_by) if db_expense.paid_by else None
-    currency_for_schema = schemas.CurrencyRead.model_validate(db_expense.currency) if db_expense.currency else None
+    paid_by_user_for_schema = (
+        schemas.UserRead.model_validate(db_expense.paid_by)
+        if db_expense.paid_by
+        else None
+    )
+    currency_for_schema = (
+        schemas.CurrencyRead.model_validate(db_expense.currency)
+        if db_expense.currency
+        else None
+    )
     # group_for_schema = schemas.GroupRead.from_orm(db_expense.group) if db_expense.group else None # If group details are needed in ExpenseRead
 
     expense_read_data = {

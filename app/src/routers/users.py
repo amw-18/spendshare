@@ -77,7 +77,7 @@ async def search_users_endpoint(
     Returns a list of users matching the query.
     Accessible to any authenticated user.
     """
-    if not query or len(query) < 2: # Add minimum query length
+    if not query or len(query) < 2:  # Add minimum query length
         return []  # Return empty list if query is empty or too short
 
     statement = (
@@ -131,8 +131,6 @@ async def update_user_endpoint(
             detail="Not authorized to update this user account",
         )
 
-    # user_in.is_admin check removed as is_admin is not in UserUpdate schema
-    # user_data will not contain 'is_admin' as it's not in UserUpdate schema
     user_data = user_in.model_dump(exclude_unset=True)
 
     # Check for email conflict
@@ -214,3 +212,4 @@ async def login_for_access_token(
         data={"sub": user.username, "user_id": user.id}  # Add user_id to token payload
     )
     return {"access_token": access_token, "token_type": "bearer"}
+

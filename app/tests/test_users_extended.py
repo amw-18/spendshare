@@ -158,7 +158,6 @@ async def test_password_update_validation(
 async def test_concurrent_user_updates(
     client: AsyncClient,
     normal_user_token_headers: dict[str, str],
-    # admin_user_token_headers: dict[str, str], # Removed
     normal_user: User,
 ):
     """Test handling of concurrent updates to the same user (email field)"""
@@ -170,12 +169,12 @@ async def test_concurrent_user_updates(
     # Note: True concurrency is hard to guarantee in tests like this.
     # This will mostly test if the endpoint can handle rapid sequential updates.
     response1 = await client.put(
-        f"/api/v1/users/{normal_user.id}", # Update by ID
+        f"/api/v1/users/{normal_user.id}",  # Update by ID
         json=update_data1,
         headers=normal_user_token_headers,
     )
     response2 = await client.put(
-        f"/api/v1/users/{normal_user.id}", # Update by ID
+        f"/api/v1/users/{normal_user.id}",  # Update by ID
         json=update_data2,
         headers=normal_user_token_headers,
     )
@@ -189,9 +188,7 @@ async def test_concurrent_user_updates(
     # Check final state using the /me endpoint with the original token
     # This assumes the email update doesn't invalidate the token immediately
     # and that the user is still logged in with the same session.
-    response = await client.get(
-        "/api/v1/users/me", headers=normal_user_token_headers
-    )
+    response = await client.get("/api/v1/users/me", headers=normal_user_token_headers)
     assert response.status_code == status.HTTP_200_OK
     final_data = response.json()
     assert final_data["email"] in [update_data1["email"], update_data2["email"]]
