@@ -265,7 +265,7 @@ async def test_get_transaction_access_control(
     response_get_admin = await client.get(
         f"{API_V1_STR}/transactions/{transaction_id}", headers=admin_user_token_headers
     )
-    assert response_get_admin.status_code == status.HTTP_200_OK
+    assert response_get_admin.status_code == status.HTTP_403_FORBIDDEN # Changed: Admin is not creator or involved participant
 
     setup_data = expense_with_participants_setup
     payer_headers = setup_data["payer_headers"]

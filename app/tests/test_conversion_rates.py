@@ -35,8 +35,8 @@ async def create_test_currency_for_rates(
 # Basic structure for tests will follow
 # Tests for POST /api/v1/conversion-rates/
 @pytest.mark.asyncio
-async def test_create_conversion_rate_as_admin(
-    client: AsyncClient, admin_user_token_headers: dict
+async def test_create_conversion_rate_as_admin( # Renaming to test_create_conversion_rate
+    client: AsyncClient, normal_user_token_headers: dict # Changed admin_user_token_headers
 ):
     # Create currencies first
     usd = await create_test_currency_for_rates(code="USD", name="US Dollar", symbol="$")
@@ -44,7 +44,7 @@ async def test_create_conversion_rate_as_admin(
 
     rate_data = {"from_currency_id": usd.id, "to_currency_id": eur.id, "rate": 0.85}
     response = await client.post(
-        "/api/v1/conversion-rates/", json=rate_data, headers=admin_user_token_headers
+        "/api/v1/conversion-rates/", json=rate_data, headers=normal_user_token_headers # Changed admin_user_token_headers
     )
     assert response.status_code == status.HTTP_201_CREATED
     data = response.json()
@@ -67,78 +67,86 @@ async def test_create_conversion_rate_as_normal_user(
     response = await client.post(
         "/api/v1/conversion-rates/", json=rate_data, headers=normal_user_token_headers
     )
-    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert response.status_code == status.HTTP_201_CREATED # Changed from 403
+    data = response.json()
+    assert data["rate"] == rate_data["rate"]
+    assert data["from_currency"]["id"] == usd.id
+    assert data["from_currency"]["code"] == usd.code # Assuming usd object has code attribute
+    assert data["to_currency"]["id"] == eur.id
+    assert data["to_currency"]["code"] == eur.code # Assuming eur object has code attribute
+    assert "id" in data
+    assert "timestamp" in data
 
 @pytest.mark.asyncio
-async def test_create_conversion_rate_same_currency(
-    client: AsyncClient, admin_user_token_headers: dict
+async def test_create_conversion_rate_same_currency( # All users can attempt this
+    client: AsyncClient, normal_user_token_headers: dict # Changed admin_user_token_headers
 ):
     jpy = await create_test_currency_for_rates(code="JPY", name="Japanese Yen", symbol="¥")
     rate_data = {"from_currency_id": jpy.id, "to_currency_id": jpy.id, "rate": 1.0}
     response = await client.post(
-        "/api/v1/conversion-rates/", json=rate_data, headers=admin_user_token_headers
+        "/api/v1/conversion-rates/", json=rate_data, headers=normal_user_token_headers # Changed admin_user_token_headers
     )
     assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 @pytest.mark.asyncio
-async def test_create_conversion_rate_non_existent_from_currency(
-    client: AsyncClient, admin_user_token_headers: dict
+async def test_create_conversion_rate_non_existent_from_currency( # All users can attempt this
+    client: AsyncClient, normal_user_token_headers: dict # Changed admin_user_token_headers
 ):
     cad = await create_test_currency_for_rates(code="CAD", name="Canadian Dollar")
     non_existent_id = 99999
     rate_data = {"from_currency_id": non_existent_id, "to_currency_id": cad.id, "rate": 0.75}
     response = await client.post(
-        "/api/v1/conversion-rates/", json=rate_data, headers=admin_user_token_headers
+        "/api/v1/conversion-rates/", json=rate_data, headers=normal_user_token_headers # Changed admin_user_token_headers
     )
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
 @pytest.mark.asyncio
-async def test_create_conversion_rate_non_existent_to_currency(
-    client: AsyncClient, admin_user_token_headers: dict
+async def test_create_conversion_rate_non_existent_to_currency( # All users can attempt this
+    client: AsyncClient, normal_user_token_headers: dict # Changed admin_user_token_headers
 ):
     gbp = await create_test_currency_for_rates(code="GBP", name="British Pound")
     non_existent_id = 88888
     rate_data = {"from_currency_id": gbp.id, "to_currency_id": non_existent_id, "rate": 1.2}
     response = await client.post(
-        "/api/v1/conversion-rates/", json=rate_data, headers=admin_user_token_headers
+        "/api/v1/conversion-rates/", json=rate_data, headers=normal_user_token_headers # Changed admin_user_token_headers
     )
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
 @pytest.mark.asyncio
-async def test_create_conversion_rate_invalid_rate_zero(
-    client: AsyncClient, admin_user_token_headers: dict
+async def test_create_conversion_rate_invalid_rate_zero( # All users can attempt this
+    client: AsyncClient, normal_user_token_headers: dict # Changed admin_user_token_headers
 ):
     aud = await create_test_currency_for_rates(code="AUD", name="Australian Dollar")
     nzd = await create_test_currency_for_rates(code="NZD", name="New Zealand Dollar")
     rate_data = {"from_currency_id": aud.id, "to_currency_id": nzd.id, "rate": 0}
     response = await client.post(
-        "/api/v1/conversion-rates/", json=rate_data, headers=admin_user_token_headers
+        "/api/v1/conversion-rates/", json=rate_data, headers=normal_user_token_headers # Changed admin_user_token_headers
     )
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
 @pytest.mark.asyncio
-async def test_create_conversion_rate_invalid_rate_negative(
-    client: AsyncClient, admin_user_token_headers: dict
+async def test_create_conversion_rate_invalid_rate_negative( # All users can attempt this
+    client: AsyncClient, normal_user_token_headers: dict # Changed admin_user_token_headers
 ):
     chf = await create_test_currency_for_rates(code="CHF", name="Swiss Franc")
     sek = await create_test_currency_for_rates(code="SEK", name="Swedish Krona")
     rate_data = {"from_currency_id": chf.id, "to_currency_id": sek.id, "rate": -0.5}
     response = await client.post(
-        "/api/v1/conversion-rates/", json=rate_data, headers=admin_user_token_headers
+        "/api/v1/conversion-rates/", json=rate_data, headers=normal_user_token_headers # Changed admin_user_token_headers
     )
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
 
 # Tests for GET /api/v1/conversion-rates/
 @pytest.mark.asyncio
-async def test_read_conversion_rates_empty(client: AsyncClient):
+async def test_read_conversion_rates_empty(client: AsyncClient): # Public endpoint
     response = await client.get("/api/v1/conversion-rates/")
     assert response.status_code == status.HTTP_200_OK
     assert response.json() == []
 
 @pytest.mark.asyncio
-async def test_read_conversion_rates_with_data(
-    client: AsyncClient, admin_user_token_headers: dict
+async def test_read_conversion_rates_with_data( # Setup can be done by normal user
+    client: AsyncClient, normal_user_token_headers: dict # Changed admin_user_token_headers
 ):
     # Create some currencies
     curr1 = await create_test_currency_for_rates(code="CR1", name="Rate Currency 1")
@@ -150,16 +158,16 @@ async def test_read_conversion_rates_with_data(
     # or rely on DB insertion order for this test if timestamps are too close.
     # For this test, we'll assume distinct enough timestamps or stable order for recent items.
     rate_data1 = {"from_currency_id": curr1.id, "to_currency_id": curr2.id, "rate": 1.1}
-    await client.post("/api/v1/conversion-rates/", json=rate_data1, headers=admin_user_token_headers)
+    await client.post("/api/v1/conversion-rates/", json=rate_data1, headers=normal_user_token_headers) # Changed admin_user_token_headers
     
     # A short delay might help ensure different timestamps if default_factory is second-level precision
     # import asyncio
     # await asyncio.sleep(0.01) 
 
     rate_data2 = {"from_currency_id": curr2.id, "to_currency_id": curr3.id, "rate": 1.2}
-    await client.post("/api/v1/conversion-rates/", json=rate_data2, headers=admin_user_token_headers)
+    await client.post("/api/v1/conversion-rates/", json=rate_data2, headers=normal_user_token_headers) # Changed admin_user_token_headers
 
-    response = await client.get("/api/v1/conversion-rates/")
+    response = await client.get("/api/v1/conversion-rates/") # Public endpoint
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
     assert len(data) >= 2 # Could be more if other tests ran and didn't clean up fully
@@ -180,19 +188,19 @@ async def test_read_conversion_rates_with_data(
              assert idx_cr2_cr3 < idx_cr1_cr2 # CR2->CR3 should be more recent
 
 @pytest.mark.asyncio
-async def test_read_conversion_rates_pagination(
-    client: AsyncClient, admin_user_token_headers: dict
+async def test_read_conversion_rates_pagination( # Setup can be done by normal user
+    client: AsyncClient, normal_user_token_headers: dict # Changed admin_user_token_headers
 ):
     # Create a few currencies for pagination test
     curr_p1 = await create_test_currency_for_rates(code="CP1", name="Pag Cur 1")
     curr_p2 = await create_test_currency_for_rates(code="CP2", name="Pag Cur 2")
     # Create 3 rates
-    await client.post("/api/v1/conversion-rates/", json={"from_currency_id": curr_p1.id, "to_currency_id": curr_p2.id, "rate": 1.0}, headers=admin_user_token_headers)
-    await client.post("/api/v1/conversion-rates/", json={"from_currency_id": curr_p1.id, "to_currency_id": curr_p2.id, "rate": 1.1}, headers=admin_user_token_headers)
-    await client.post("/api/v1/conversion-rates/", json={"from_currency_id": curr_p1.id, "to_currency_id": curr_p2.id, "rate": 1.2}, headers=admin_user_token_headers)
+    await client.post("/api/v1/conversion-rates/", json={"from_currency_id": curr_p1.id, "to_currency_id": curr_p2.id, "rate": 1.0}, headers=normal_user_token_headers) # Changed
+    await client.post("/api/v1/conversion-rates/", json={"from_currency_id": curr_p1.id, "to_currency_id": curr_p2.id, "rate": 1.1}, headers=normal_user_token_headers) # Changed
+    await client.post("/api/v1/conversion-rates/", json={"from_currency_id": curr_p1.id, "to_currency_id": curr_p2.id, "rate": 1.2}, headers=normal_user_token_headers) # Changed
 
     # Test limit
-    response_limit_1 = await client.get("/api/v1/conversion-rates/?limit=1")
+    response_limit_1 = await client.get("/api/v1/conversion-rates/?limit=1") # Public endpoint
     assert response_limit_1.status_code == status.HTTP_200_OK
     data_limit_1 = response_limit_1.json()
     assert len(data_limit_1) == 1
@@ -213,8 +221,8 @@ async def test_read_conversion_rates_pagination(
 
 # Tests for GET /api/v1/conversion-rates/latest
 @pytest.mark.asyncio
-async def test_read_latest_conversion_rate_success(
-    client: AsyncClient, admin_user_token_headers: dict
+async def test_read_latest_conversion_rate_success( # Setup can be done by normal user
+    client: AsyncClient, normal_user_token_headers: dict # Changed admin_user_token_headers
 ):
     from datetime import datetime, timedelta, timezone
 
@@ -226,10 +234,10 @@ async def test_read_latest_conversion_rate_success(
     # The model uses default_factory=utcnow, so we can't directly set it via API.
     # This test will rely on the most recently POSTed rate for a pair being the "latest".
     
-    await client.post("/api/v1/conversion-rates/", json={"from_currency_id": curr_L1.id, "to_currency_id": curr_L2.id, "rate": 1.5}, headers=admin_user_token_headers)
+    await client.post("/api/v1/conversion-rates/", json={"from_currency_id": curr_L1.id, "to_currency_id": curr_L2.id, "rate": 1.5}, headers=normal_user_token_headers) # Changed
     # await asyncio.sleep(0.01) # Ensure timestamp difference
     latest_rate_payload = {"from_currency_id": curr_L1.id, "to_currency_id": curr_L2.id, "rate": 1.55}
-    response_post_latest = await client.post("/api/v1/conversion-rates/", json=latest_rate_payload, headers=admin_user_token_headers)
+    response_post_latest = await client.post("/api/v1/conversion-rates/", json=latest_rate_payload, headers=normal_user_token_headers) # Changed
     assert response_post_latest.status_code == status.HTTP_201_CREATED
     latest_posted_id = response_post_latest.json()['id']
 

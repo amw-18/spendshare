@@ -21,11 +21,12 @@ async def create_currency(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    if not current_user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to create currencies",
-        )
+    # Admin check removed
+    # if not current_user.is_admin:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_403_FORBIDDEN,
+    #         detail="Not authorized to create currencies",
+    #     )
     statement = select(Currency).where(Currency.code == currency_in.code)
     existing_currency = (await session.exec(statement)).first()
     if existing_currency:
@@ -68,11 +69,12 @@ async def update_currency(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    if not current_user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to update currencies",
-        )
+    # Admin check removed
+    # if not current_user.is_admin:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_403_FORBIDDEN,
+    #         detail="Not authorized to update currencies",
+    #     )
     db_currency = await get_object_or_404(session, Currency, currency_id)
 
     if currency_in.code and currency_in.code != db_currency.code:
@@ -100,11 +102,12 @@ async def delete_currency(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    if not current_user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to delete currencies",
-        )
+    # Admin check removed
+    # if not current_user.is_admin:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_403_FORBIDDEN,
+    #         detail="Not authorized to delete currencies",
+    #     )
     db_currency = await get_object_or_404(session, Currency, currency_id)
     await session.refresh(db_currency, attribute_names=["expenses"])  # Explicitly load expenses
     if len(db_currency.expenses) > 0:  # Check if any expense is using this currency

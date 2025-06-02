@@ -189,13 +189,15 @@ async def test_read_expense_authorization(
     response_admin_view = await client.get(
         f"/api/v1/expenses/{expense_id}", headers=admin_user_token_headers
     )
-    assert response_admin_view.status_code == status.HTTP_200_OK
-    admin_view_data = response_admin_view.json()
-    assert admin_view_data["currency"] is not None
-    assert admin_view_data["currency"]["id"] == test_currency.id
-    for pd_item in admin_view_data["participant_details"]: # Check participant details in admin view
-        assert "id" in pd_item and isinstance(pd_item["id"], int)
-        assert pd_item.get("settled_transaction_id") is None
+    assert response_admin_view.status_code == status.HTTP_403_FORBIDDEN # Changed: Admin no longer has special access
+    # If admin was a participant or payer, this would be 200. Here, admin is not involved.
+    # No need to check admin_view_data if 403 is expected, so related assertions are removed.
+    # admin_view_data = response_admin_view.json() # This line would cause NameError if response is 403
+    # assert admin_view_data["currency"] is not None # This and following lines depend on admin_view_data
+    # assert admin_view_data["currency"]["id"] == test_currency.id
+    # for pd_item in admin_view_data["participant_details"]: # Check participant details in admin view
+    #     assert "id" in pd_item and isinstance(pd_item["id"], int)
+    #     assert pd_item.get("settled_transaction_id") is None
 
 
     # Test: Participant (other_user) can view
@@ -280,13 +282,13 @@ async def test_delete_expense_authorization(
 
     response_admin_delete = await client.delete(
         f"/api/v1/expenses/{expense_id_admin_del}", headers=admin_user_token_headers
-    )  # admin deletes
-    assert response_admin_delete.status_code == status.HTTP_200_OK
-    # Verify deletion
-    response_get_after_admin_delete = await client.get(
+    )  # admin tries to delete
+    assert response_admin_delete.status_code == status.HTTP_403_FORBIDDEN # Changed: Admin cannot delete other's expense unless payer
+    # Verify expense still exists as admin delete should fail
+    response_get_after_admin_delete_attempt = await client.get( # Renamed variable for clarity
         f"/api/v1/expenses/{expense_id_admin_del}", headers=normal_user_token_headers
     )  # normal_user (payer) tries to get
-    assert response_get_after_admin_delete.status_code == status.HTTP_404_NOT_FOUND
+    assert response_get_after_admin_delete_attempt.status_code == status.HTTP_200_OK # Changed: Expense should still exist
 
     # Test: Other user (non-payer/non-admin) cannot delete
     expense_data_other_del = {

@@ -88,7 +88,7 @@ async def normal_user() -> AsyncGenerator[User, None]:
         username="testuser",
         email="testuser_normal@example.com",
         hashed_password=get_password_hash("password123"),
-        is_admin=False,
+        # is_admin=False, # Removed is_admin
     )
     async with TestingSessionLocal() as session:
         session.add(user)
@@ -128,7 +128,7 @@ async def admin_user() -> AsyncGenerator[User, None]:
         username="adminuser",
         email="adminuser_admin@example.com",
         hashed_password=get_password_hash("password123"),
-        is_admin=True,
+        # is_admin=True, # Removed is_admin
     )
     async with TestingSessionLocal() as session:
         session.add(admin)

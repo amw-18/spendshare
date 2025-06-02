@@ -59,7 +59,6 @@ class User(SQLModel, table=True):
     username: str = Field(index=True, unique=True)
     email: str = Field(unique=True, index=True)
     hashed_password: str
-    is_admin: bool = Field(default=False, nullable=False)
 
     groups: List["Group"] = Relationship(
         back_populates="members",
