@@ -1,0 +1,58 @@
+name: spendshare_mobile
+description: A new Flutter project for SpendShare.
+
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # Http client for API calls
+  http: ^1.2.0
+  # State management (consider provider, Riverpod, BLoC, GetX, etc.) - adding provider as a common choice
+  provider: ^6.0.0
+  # For storing simple key-value pairs (e.g., auth tokens)
+  shared_preferences: ^2.2.0
+  # For JSON serialization/deserialization if using code generation
+  # json_annotation: ^4.8.0
+  # For internationalization/localization
+  # flutter_localizations:
+  #   sdk: flutter
+  # intl: ^0.19.0 
+  flutter_svg: ^2.0.0 # or latest compatible version
+
+  cupertino_icons: ^1.0.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  # For code generation (e.g., with json_serializable)
+  # build_runner: ^2.4.0
+  # json_serializable: ^6.7.0
+
+flutter:
+  uses-material-design: true
+
+  # To add assets to your application, add an assets section, like this:
+  assets:
+    - assets/fonts/ # To make sure the directory is included
+
+  # To add custom fonts to your application, add a fonts section here,
+  # in this "flutter" section. Each entry in this list should have a
+  # "family" key with the font family name, and a "fonts" key with a
+  # list giving the asset and other descriptors for the font. For
+  # example:
+  fonts:
+    - family: PlusJakartaSans
+      fonts:
+        - asset: assets/fonts/PlusJakartaSans-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/PlusJakartaSans-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/PlusJakartaSans-ExtraBold.ttf
+          weight: 800
