@@ -123,6 +123,7 @@ class ExpenseRead(ExpenseBase):
     currency: Optional["CurrencyRead"] = None  # Added currency
     description: str = Field(default="")
     participant_details: List["ExpenseParticipantReadWithUser"] = []
+    is_settled: bool = False
 
 
 class ExpenseUpdate(SQLModel):
@@ -161,6 +162,8 @@ class ExpenseParticipantReadWithUser(ExpenseParticipantRead):
     settled_currency: Optional["CurrencyRead"] = (
         None  # Currency object of the transaction, use forward reference
     )
+    settled_with_conversion_rate_id: Optional[int] = None
+    settled_at_conversion_timestamp: Optional[datetime] = None
 
 
 # Schemas with Relationships (for responses)
@@ -257,6 +260,7 @@ class ConversionRateCreate(ConversionRateBase):
 class ConversionRateRead(ConversionRateBase):
     id: int
     timestamp: datetime
+    source: Optional[str] = None
     from_currency: Optional[CurrencyRead] = None
     to_currency: Optional[CurrencyRead] = None
 
@@ -316,3 +320,72 @@ class SettlementResponse(SQLModel):
     status: str
     message: Optional[str] = None
     updated_expense_participations: List[SettlementResultItem]
+
+
+# Multi-Currency Settlement Schemas
+class NetBalanceItem(BaseModel):
+    original_currency_id: int
+    original_currency: Optional[CurrencyRead] = None
+    net_amount_in_original_currency: float
+
+
+class GroupSettlementDetails(BaseModel):
+    user_id_to_settle_for: int
+    group_id: int
+    target_settlement_currency_id: int
+    target_settlement_currency: Optional[CurrencyRead] = None
+    net_balance_details: List[NetBalanceItem]
+    relevant_expense_participant_ids_to_settle: List[int]
+    suggested_conversion_rates: List[ConversionRateRead]
+
+
+class ExpenseSettlementDetails(BaseModel):
+    user_id_to_settle_for: int
+    expense_id: int
+    expense_participant_id: int
+    share_amount_in_expense_currency: float
+    expense_currency_id: int
+    expense_currency: Optional[CurrencyRead] = None
+    target_settlement_currency_id: int
+    target_settlement_currency: Optional[CurrencyRead] = None
+    suggested_conversion_rate: Optional[ConversionRateRead] = None
+
+
+class SettlementItem(BaseModel):
+    expense_participant_id: int
+    amount_from_transaction: float = Field(gt=0)
+    conversion_rate_id: int
+    conversion_timestamp: datetime
+
+
+class CreateSettlementTransactionRequest(BaseModel):
+    description: Optional[str] = None
+    transaction_currency_id: int
+    transaction_amount: float = Field(gt=0)
+    settlements: List[SettlementItem]
+
+    @field_validator("settlements")
+    @classmethod
+    def settlements_must_not_be_empty(cls, v: List[SettlementItem]) -> List[SettlementItem]:
+        if not v:
+            raise ValueError("Settlements list cannot be empty.")
+        return v
+
+
+class SettledParticipationDetail(BaseModel):
+    expense_participant_id: int
+    settled_transaction_id: int
+    settled_amount_in_transaction_currency: float
+
+
+class UpdatedExpenseStatus(BaseModel):
+    expense_id: int
+    is_settled: bool
+
+
+class CreateSettlementTransactionResponse(BaseModel):
+    transaction_id: int
+    status: str = "success"
+    message: str
+    settled_expense_participations: List[SettledParticipationDetail]
+    updated_expenses_status: List[UpdatedExpenseStatus]

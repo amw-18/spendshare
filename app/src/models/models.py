@@ -52,6 +52,16 @@ class ExpenseParticipant(SQLModel, table=True):
     # Relationship to Expense
     expense: "Expense" = Relationship(back_populates="all_participant_details")
 
+    # Fields for multi-currency settlement
+    settled_with_conversion_rate_id: Optional[int] = Field(
+        default=None, 
+        sa_column=Column(Integer, ForeignKey("conversionrate.id", ondelete="SET NULL"))
+    )
+    settled_at_conversion_timestamp: Optional[datetime] = Field(default=None)
+    settled_conversion_rate: Optional["ConversionRate"] = Relationship(
+        sa_relationship_kwargs={ "foreign_keys": "[ExpenseParticipant.settled_with_conversion_rate_id]"}
+    )
+
 
 class User(SQLModel, table=True):
     __table_args__ = {"extend_existing": True}
@@ -80,13 +90,18 @@ class User(SQLModel, table=True):
     )
     transactions_created: List["Transaction"] = Relationship(
         back_populates="created_by",
-        sa_relationship_kwargs={"cascade": "all, delete-orphan"}, # if user is deleted, their transactions are deleted
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan"
+        },  # if user is deleted, their transactions are deleted
     )
 
     # Link to the actual ExpenseParticipant entries for this user
     participant_records: List["ExpenseParticipant"] = Relationship(
         back_populates="user",
-        sa_relationship_kwargs={"cascade": "all, delete-orphan", "overlaps": "expenses_participated_in"}
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan",
+            "overlaps": "expenses_participated_in",
+        },
     )
 
 
@@ -141,13 +156,21 @@ class Expense(SQLModel, table=True):
     participants: List["User"] = Relationship(
         back_populates="expenses_participated_in",
         link_model=ExpenseParticipant,
-        sa_relationship_kwargs={"cascade": "all, delete", "overlaps": "expense,participant_records,user"},
+        sa_relationship_kwargs={
+            "cascade": "all, delete",
+            "overlaps": "expense,participant_records,user",
+        },
     )
+
+    is_settled: bool = Field(default=False, nullable=False)
 
     # Relationship to the ExpenseParticipant link table records for this expense
     all_participant_details: List["ExpenseParticipant"] = Relationship(
         back_populates="expense",
-        sa_relationship_kwargs={"cascade": "all, delete-orphan", "overlaps": "expenses_participated_in,participants"}
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan",
+            "overlaps": "expenses_participated_in,participants",
+        },
     )
 
 
@@ -190,6 +213,7 @@ class ConversionRate(SQLModel, table=True):
     timestamp: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), nullable=False
     )
+    source: Optional[str] = Field(default=None)  # e.g., "ECB", "UserProvided"
 
     from_currency: Optional["Currency"] = Relationship(
         back_populates="conversion_rates_from",
@@ -207,14 +231,14 @@ class Transaction(SQLModel, table=True):
     amount: float
     currency_id: int = Field(
         sa_column=Column(Integer, ForeignKey("currency.id", ondelete="CASCADE"))
-    ) # If currency is deleted, cascade delete transactions
+    )  # If currency is deleted, cascade delete transactions
     timestamp: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), nullable=False
     )
     description: Optional[str] = Field(default=None)
     created_by_user_id: int = Field(
         sa_column=Column(Integer, ForeignKey("user.id", ondelete="CASCADE"))
-    ) # If user is deleted, cascade delete transactions
+    )  # If user is deleted, cascade delete transactions
 
     currency: "Currency" = Relationship(back_populates="transactions")
     created_by: "User" = Relationship(back_populates="transactions_created")
@@ -222,6 +246,6 @@ class Transaction(SQLModel, table=True):
     settled_expense_participations: List["ExpenseParticipant"] = Relationship(
         back_populates="transaction",
         sa_relationship_kwargs={
-            "cascade": "save-update, merge", # Keep participations if transaction is deleted, just nullify the link
+            "cascade": "save-update, merge",  # Keep participations if transaction is deleted, just nullify the link
         },
     )
