@@ -1,4 +1,4 @@
-/* generated using openapi-typescript-codegen -- do not edit */
+/* generated using openapi-typescript-codegen -- do no edit */
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
@@ -17,6 +17,7 @@ export type { CurrencyRead } from './models/CurrencyRead';
 export type { CurrencyUpdate } from './models/CurrencyUpdate';
 export type { ExpenseCreate } from './models/ExpenseCreate';
 export type { ExpenseParticipantReadWithUser } from './models/ExpenseParticipantReadWithUser';
+export type { ExpenseParticipantSettlementInfo } from './models/ExpenseParticipantSettlementInfo';
 export type { ExpenseRead } from './models/ExpenseRead';
 export type { ExpenseUpdate } from './models/ExpenseUpdate';
 export type { GroupCreate } from './models/GroupCreate';
@@ -24,7 +25,12 @@ export type { GroupRead } from './models/GroupRead';
 export type { GroupUpdate } from './models/GroupUpdate';
 export type { HTTPValidationError } from './models/HTTPValidationError';
 export type { ParticipantUpdate } from './models/ParticipantUpdate';
+export type { SettleExpensesRequest } from './models/SettleExpensesRequest';
+export type { SettlementResponse } from './models/SettlementResponse';
+export type { SettlementResultItem } from './models/SettlementResultItem';
 export type { Token } from './models/Token';
+export type { TransactionCreate } from './models/TransactionCreate';
+export type { TransactionRead } from './models/TransactionRead';
 export type { UserBalanceResponse } from './models/UserBalanceResponse';
 export type { UserCreate } from './models/UserCreate';
 export type { UserRead } from './models/UserRead';
@@ -37,4 +43,5 @@ export { CurrenciesService } from './services/CurrenciesService';
 export { DefaultService } from './services/DefaultService';
 export { ExpensesService } from './services/ExpensesService';
 export { GroupsService } from './services/GroupsService';
+export { TransactionsService } from './services/TransactionsService';
 export { UsersService } from './services/UsersService';

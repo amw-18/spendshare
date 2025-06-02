@@ -5,13 +5,13 @@
 
 import type { CurrencyRead } from './CurrencyRead';
 
-export type ConversionRateRead = {
-    from_currency_id: number;
-    to_currency_id: number;
-    rate: number;
+export type TransactionRead = {
+    amount: number;
+    currency_id: number;
+    description?: (string | null);
     id: number;
     timestamp: string;
-    from_currency?: (CurrencyRead | null);
-    to_currency?: (CurrencyRead | null);
+    created_by_user_id: number;
+    currency?: (CurrencyRead | null);
 };
 

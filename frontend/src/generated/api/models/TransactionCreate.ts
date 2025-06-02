@@ -3,8 +3,9 @@
 /* tslint:disable */
 /* eslint-disable */
 
-export type Token = {
-    access_token: string;
-    token_type: string;
+export type TransactionCreate = {
+    amount: number;
+    currency_id: number;
+    description?: (string | null);
 };
 

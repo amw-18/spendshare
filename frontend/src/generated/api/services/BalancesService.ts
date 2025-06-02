@@ -1,12 +1,15 @@
-/* generated using openapi-typescript-codegen -- do not edit */
+/* generated using openapi-typescript-codegen -- do no edit */
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
 import type { UserBalanceResponse } from '../models/UserBalanceResponse';
+
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
+
 export class BalancesService {
+
     /**
      * Get User Balances
      * @returns UserBalanceResponse Successful Response
@@ -18,4 +21,5 @@ export class BalancesService {
             url: '/api/v1/balances/me',
         });
     }
+
 }

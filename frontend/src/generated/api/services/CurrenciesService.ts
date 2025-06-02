@@ -1,14 +1,17 @@
-/* generated using openapi-typescript-codegen -- do not edit */
+/* generated using openapi-typescript-codegen -- do no edit */
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
 import type { CurrencyCreate } from '../models/CurrencyCreate';
 import type { CurrencyRead } from '../models/CurrencyRead';
 import type { CurrencyUpdate } from '../models/CurrencyUpdate';
+
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
+
 export class CurrenciesService {
+
     /**
      * Create Currency
      * @param requestBody
@@ -28,6 +31,7 @@ export class CurrenciesService {
             },
         });
     }
+
     /**
      * List Currencies
      * @param skip
@@ -51,6 +55,7 @@ export class CurrenciesService {
             },
         });
     }
+
     /**
      * Get Currency
      * @param currencyId
@@ -71,6 +76,7 @@ export class CurrenciesService {
             },
         });
     }
+
     /**
      * Update Currency
      * @param currencyId
@@ -95,6 +101,7 @@ export class CurrenciesService {
             },
         });
     }
+
     /**
      * Delete Currency
      * @param currencyId
@@ -115,4 +122,5 @@ export class CurrenciesService {
             },
         });
     }
+
 }

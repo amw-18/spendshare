@@ -1,14 +1,17 @@
-/* generated using openapi-typescript-codegen -- do not edit */
+/* generated using openapi-typescript-codegen -- do no edit */
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
 import type { GroupCreate } from '../models/GroupCreate';
 import type { GroupRead } from '../models/GroupRead';
 import type { GroupUpdate } from '../models/GroupUpdate';
+
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
+
 export class GroupsService {
+
     /**
      * Create Group Endpoint
      * @param requestBody
@@ -28,6 +31,7 @@ export class GroupsService {
             },
         });
     }
+
     /**
      * Read Groups Endpoint
      * @param skip
@@ -51,6 +55,7 @@ export class GroupsService {
             },
         });
     }
+
     /**
      * Read Group Endpoint
      * @param groupId
@@ -71,6 +76,7 @@ export class GroupsService {
             },
         });
     }
+
     /**
      * Update Group Endpoint
      * @param groupId
@@ -95,6 +101,7 @@ export class GroupsService {
             },
         });
     }
+
     /**
      * Delete Group Endpoint
      * @param groupId
@@ -115,6 +122,7 @@ export class GroupsService {
             },
         });
     }
+
     /**
      * Add Group Member Endpoint
      * @param groupId
@@ -138,6 +146,7 @@ export class GroupsService {
             },
         });
     }
+
     /**
      * Remove Group Member Endpoint
      * @param groupId
@@ -161,4 +170,5 @@ export class GroupsService {
             },
         });
     }
+
 }
