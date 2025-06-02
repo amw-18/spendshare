@@ -156,7 +156,7 @@ async def read_expenses_endpoint(
     user_id: Optional[int] = None,
     group_id: Optional[int] = None,
     current_user: User = Depends(get_current_user),
-) -> List[Expense]:
+) -> List[schemas.ExpenseRead]:
     # Base query with eager loading for fields directly on Expense model
     # _get_expense_read_details will handle loading participant details separately
     base_options = [
@@ -452,7 +452,7 @@ async def update_expense_endpoint(
 
 @router.post(
     "/settle", response_model=schemas.SettlementResponse, status_code=status.HTTP_200_OK
-)
+)  # this should probably happen in the backend only (background task maybe). TransactionCreate should have a list of expense_id's to use for this transaction
 async def settle_expenses_endpoint(
     *,
     session: AsyncSession = Depends(get_session),
@@ -461,6 +461,7 @@ async def settle_expenses_endpoint(
 ):
     """
     Settle one or more expense participations using a transaction.
+    All or none.
     """
     # Retrieve the transaction
     transaction = await session.get(
@@ -527,30 +528,16 @@ async def settle_expenses_endpoint(
         expense_participant = result_ep.first()
 
         if not expense_participant:
-            results.append(
-                schemas.SettlementResultItem(
-                    expense_participant_id=item.expense_participant_id,
-                    settled_transaction_id=transaction.id,
-                    settled_amount_in_transaction_currency=item.settled_amount,
-                    settled_currency_id=item.settled_currency_id,
-                    status="Failed",
-                    message="ExpenseParticipant record not found.",
-                )
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="ExpenseParticipant record not found.",
             )
-            continue
 
         if not expense_participant.expense:  # Should be loaded due to selectinload
-            results.append(
-                schemas.SettlementResultItem(
-                    expense_participant_id=item.expense_participant_id,
-                    settled_transaction_id=transaction.id,
-                    settled_amount_in_transaction_currency=item.settled_amount,
-                    settled_currency_id=item.settled_currency_id,
-                    status="Failed",
-                    message="Could not load parent expense for participation record.",
-                )
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Could not load parent expense for participation record.",
             )
-            continue
 
         # Authorization check for settling this specific ExpenseParticipant:
         # The current_user (who created the transaction) can settle an ExpenseParticipant if:
@@ -562,55 +549,37 @@ async def settle_expenses_endpoint(
         is_own_participation = expense_participant.user_id == current_user.id
 
         if not (is_original_payer or is_own_participation):
-            results.append(
-                schemas.SettlementResultItem(
-                    expense_participant_id=item.expense_participant_id,
-                    settled_transaction_id=transaction.id,
-                    settled_amount_in_transaction_currency=item.settled_amount,
-                    settled_currency_id=item.settled_currency_id,
-                    status="Failed",
-                    message="Not authorized to settle this expense participation.",
-                )
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Not authorized to settle this expense participation.",
             )
-            continue
 
         # Verify settled_currency_id matches transaction.currency_id
+        # TODO: This needs to be relaxed later on
         if item.settled_currency_id != transaction.currency_id:
-            results.append(
-                schemas.SettlementResultItem(
-                    expense_participant_id=item.expense_participant_id,
-                    settled_transaction_id=transaction.id,
-                    settled_amount_in_transaction_currency=item.settled_amount,
-                    settled_currency_id=item.settled_currency_id,
-                    status="Failed",
-                    message=f"Settlement currency ID ({item.settled_currency_id}) does not match transaction currency ID ({transaction.currency_id}).",
-                )
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Settlement currency ID ({item.settled_currency_id}) does not match transaction currency ID ({transaction.currency_id}).",
             )
-            continue
 
         # Check if already settled by another transaction
         if (
             expense_participant.settled_transaction_id
             and expense_participant.settled_transaction_id != transaction.id
         ):
-            results.append(
-                schemas.SettlementResultItem(
-                    expense_participant_id=item.expense_participant_id,
-                    settled_transaction_id=transaction.id,  # or original settled_transaction_id?
-                    settled_amount_in_transaction_currency=item.settled_amount,
-                    settled_currency_id=item.settled_currency_id,
-                    status="Failed",
-                    message=f"Expense participation is already settled by transaction {expense_participant.settled_transaction_id}.",
-                )
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Expense participation is already settled by transaction {expense_participant.settled_transaction_id}.",
             )
-            continue
 
         # Update ExpenseParticipant
         expense_participant.settled_transaction_id = transaction.id
         expense_participant.settled_amount_in_transaction_currency = item.settled_amount
+
+        # TODO:
         # Potentially mark the original Expense as fully settled if all its participations are settled.
         # This logic is more complex and would require fetching all participants for the expense.
-        # For now, just update the ExpenseParticipant.
+        # For now, just update the ExpenseParticipant. This can also be a background task maybe?
 
         session.add(expense_participant)
         updated_participants_to_commit.append(
@@ -623,7 +592,6 @@ async def settle_expenses_endpoint(
                 settled_transaction_id=transaction.id,
                 settled_amount_in_transaction_currency=item.settled_amount,
                 settled_currency_id=transaction.currency_id,  # Use transaction's currency ID
-                status="Success",
                 message="Settled successfully.",
             )
         )
@@ -634,7 +602,7 @@ async def settle_expenses_endpoint(
             await session.refresh(ep)  # Refresh to get any DB-side updates if necessary
 
     return schemas.SettlementResponse(
-        status="Completed",  # Or "PartiallyCompleted" if some failed
+        status="Completed",
         message="Settlement process finished. Check individual item statuses.",
         updated_expense_participations=results,
     )

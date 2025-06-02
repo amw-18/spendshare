@@ -141,7 +141,7 @@ class ParticipantUpdate(SQLModel):
 
 # Schemas for reading participant details with shares
 class ExpenseParticipantBase(SQLModel):
-    id: int # Added id field
+    id: int  # Added id field
     user_id: int
     expense_id: int
     share_amount: Optional[float]
@@ -155,8 +155,12 @@ class ExpenseParticipantReadWithUser(ExpenseParticipantRead):
     user: UserRead
     settled_transaction_id: Optional[int] = None
     settled_amount_in_transaction_currency: Optional[float] = None
-    settled_currency_id: Optional[int] = None # Currency ID of the transaction used for settlement
-    settled_currency: Optional["CurrencyRead"] = None # Currency object of the transaction, use forward reference
+    settled_currency_id: Optional[int] = (
+        None  # Currency ID of the transaction used for settlement
+    )
+    settled_currency: Optional["CurrencyRead"] = (
+        None  # Currency object of the transaction, use forward reference
+    )
 
 
 # Schemas with Relationships (for responses)
@@ -277,9 +281,13 @@ class TransactionRead(TransactionBase):
 
 # Settlement Schemas
 class ExpenseParticipantSettlementInfo(SQLModel):
-    expense_participant_id: int # This refers to the primary key of the ExpenseParticipant table link.
-    settled_amount: float = Field(gt=0) # Amount settled in the currency of the transaction
-    settled_currency_id: int # Currency ID of the transaction, for validation
+    expense_participant_id: (
+        int  # This refers to the primary key of the ExpenseParticipant table link.
+    )
+    settled_amount: float = Field(
+        gt=0
+    )  # Amount settled in the currency of the transaction
+    settled_currency_id: int  # Currency ID of the transaction, for validation
 
 
 class SettleExpensesRequest(SQLModel):
@@ -288,18 +296,19 @@ class SettleExpensesRequest(SQLModel):
 
     @field_validator("settlements")
     @classmethod
-    def settlements_must_not_be_empty(cls, v: List[ExpenseParticipantSettlementInfo]) -> List[ExpenseParticipantSettlementInfo]:
+    def settlements_must_not_be_empty(
+        cls, v: List[ExpenseParticipantSettlementInfo]
+    ) -> List[ExpenseParticipantSettlementInfo]:
         if not v:
             raise ValueError("Settlements list cannot be empty.")
         return v
 
 
 class SettlementResultItem(SQLModel):
-    expense_participant_id: int # The ID of the ExpenseParticipant link record
+    expense_participant_id: int  # The ID of the ExpenseParticipant link record
     settled_transaction_id: int
     settled_amount_in_transaction_currency: float
-    settled_currency_id: int # This is the currency_id of the transaction
-    status: str
+    settled_currency_id: int  # This is the currency_id of the transaction
     message: Optional[str] = None
 
 
