@@ -22,16 +22,19 @@ async def create_db_and_tables():
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    async_session_maker = sessionmaker(
-        async_engine, class_=AsyncSession, expire_on_commit=False
-    )
-    async with async_session_maker() as session:
+    # Moved async_session_maker to global scope as AsyncSessionLocal
+    async with AsyncSessionLocal() as session:
         yield session
 
 
 # If you need a synchronous engine for any reason (e.g., Alembic migrations not yet async-compatible),
 # you might keep it, but primary operations should use the async_engine.
 # For this project, we'll aim for full async.
+
+# Define AsyncSessionLocal at the module level
+AsyncSessionLocal = sessionmaker(
+    async_engine, class_=AsyncSession, expire_on_commit=False
+)
 # SYNC_DATABASE_URL = "sqlite:///./test_sync.db"
 # sync_engine = create_engine(SYNC_DATABASE_URL, echo=True, connect_args={"check_same_thread": False})
 # def create_sync_db_and_tables():

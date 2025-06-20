@@ -29,30 +29,49 @@ def send_beta_interest_email(
     logger.info(email_content)
     logger.info("---- END EMAIL CONTENT ----")
 
-    # In a real scenario, you would use smtplib or another email library:
-    # import smtplib
-    # from email.mime.text import MIMEText
-    #
-    # msg = MIMEText("\n".join(body_lines))
-    # msg['Subject'] = subject
-    # msg['From'] = "noreply@spendshare.app" # Or your app's email
-    # msg['To'] = email_to
-    #
-    # try:
-    #     with smtplib.SMTP('localhost', 1025) as server: # Or your actual SMTP server
-    #         server.sendmail(msg['From'], [msg['To']], msg.as_string())
-    #     logger.info(f"Successfully sent beta interest email to {email_to} for {interested_email}")
-    # except Exception as e:
-    #     logger.error(f"Failed to send beta interest email: {e}")
+async def send_verification_email(to_email: EmailStr, token: str, subject_prefix: str = "Verify your email"):
+    """
+    Sends an email with a verification link.
+    In a real application, this would integrate with an email service (e.g., SendGrid, Mailgun, or use fastapi-mail).
+    """
+    base_url = "http://localhost:3000" # This should ideally be configurable
+    verification_link = f"{base_url}/verify-email?token={token}"
 
-# Example usage (for testing this file directly, not part of the app flow):
-if __name__ == "__main__":
-    send_beta_interest_email(
-        email_to="support@example.com",
-        interested_email="testuser@example.com",
-        description="Looking forward to testing!"
-    )
-    send_beta_interest_email(
-        email_to="admin@example.com",
-        interested_email="anotheruser@example.com"
-    )
+    logger.info(f"---- EMAIL SIMULATION ----")
+    logger.info(f"To: {to_email}")
+    logger.info(f"Subject: {subject_prefix} for Your SpendShare Account")
+    logger.info(f"Body: Please verify your email address by clicking the link below:")
+    logger.info(f"{verification_link}")
+    logger.info(f"If you did not request this, please ignore this email.")
+    logger.info(f"---- END EMAIL SIMULATION ----")
+
+async def send_email_change_verification_email(to_email: EmailStr, token: str):
+    """
+    Sends an email to verify a new email address when a user requests an email change.
+    """
+    base_url = "http://localhost:3000" # This should ideally be configurable
+    verification_link = f"{base_url}/verify-email-change?token={token}"
+
+    logger.info(f"---- EMAIL SIMULATION ----")
+    logger.info(f"To: {to_email}")
+    logger.info(f"Subject: Confirm Your New Email Address for SpendShare")
+    logger.info(f"Body: Please confirm your new email address by clicking the link below:")
+    logger.info(f"{verification_link}")
+    logger.info(f"If you did not request this change, please contact support immediately.")
+    logger.info(f"---- END EMAIL SIMULATION ----")
+
+async def send_password_reset_email(to_email: EmailStr, token: str):
+    """
+    Sends an email with a password reset link.
+    (Placeholder for now, but good to have a consistent structure)
+    """
+    base_url = "http://localhost:3000" # This should ideally be configurable
+    reset_link = f"{base_url}/reset-password?token={token}" # Example, actual path might differ
+
+    logger.info(f"---- EMAIL SIMULATION ----")
+    logger.info(f"To: {to_email}")
+    logger.info(f"Subject: Reset Your Password for SpendShare")
+    logger.info(f"Body: You requested a password reset. Click the link below to set a new password:")
+    logger.info(f"{reset_link}")
+    logger.info(f"If you did not request a password reset, please ignore this email or contact support if you have concerns.")
+    logger.info(f"---- END EMAIL SIMULATION ----")
