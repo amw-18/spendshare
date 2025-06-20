@@ -6,3 +6,4 @@
 export type BetaInterestResponse = {
     message: string;
 };
+

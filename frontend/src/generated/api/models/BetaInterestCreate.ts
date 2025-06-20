@@ -7,3 +7,4 @@ export type BetaInterestCreate = {
     email: string;
     description?: (string | null);
 };
+

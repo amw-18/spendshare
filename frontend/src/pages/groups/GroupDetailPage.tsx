@@ -109,7 +109,7 @@ const GroupDetailPage: React.FC = () => {
       const fetchAllUsersForSearch = async () => {
         setAddMemberLoading(true);
         try {
-          const allUsers = await UsersService.readUsersEndpointApiV1UsersGet(0, 1000);
+          const allUsers = await UsersService.searchUsersEndpointApiV1UsersSearchGet('');
           setUsersForSearch(allUsers);
         } catch (err) {
           setErrorMembers('Could not load users for search.');

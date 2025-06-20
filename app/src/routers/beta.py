@@ -3,12 +3,12 @@ from sqlalchemy.ext.asyncio import AsyncSession # Use AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
 
 
-from app.src.models import schemas
-from app.src.models.models import BetaInterest # Import the model
-from app.src.db.database import get_session # Use get_session for async
-from app.src.core.email import send_beta_interest_email
-from app.src.config import Settings # Import Settings
-from app.src.dependencies import get_settings # Import dependency for settings
+from src.models import schemas
+from src.models.models import BetaInterest # Import the model
+from src.db.database import get_session # Use get_session for async
+from src.core.email import send_beta_interest_email
+from src.config import Settings # Import Settings
+from src.dependencies import get_settings # Import dependency for settings
 
 router = APIRouter(
     prefix="/beta",

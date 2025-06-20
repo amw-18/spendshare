@@ -120,7 +120,7 @@ const ExpenseCreatePage: React.FC = () => {
       setLoadingInitialData(true);
       try {
         const groupsPromise = GroupsService.readGroupsEndpointApiV1GroupsGet();
-        const usersPromise = UsersService.readUsersEndpointApiV1UsersGet();
+                const usersPromise = UsersService.searchUsersEndpointApiV1UsersSearchGet('');
         const currenciesPromise = CurrenciesService.listCurrenciesApiV1CurrenciesGet(undefined, 500); // Fetch currencies, skip=undefined, limit=500
 
         const [groupsResponse, usersResponse, currenciesResponse] = await Promise.all([
@@ -172,7 +172,7 @@ const ExpenseCreatePage: React.FC = () => {
       // We will continue to use all users as available participants.
       // Re-fetch all users in case the list needs to be refreshed for some reason,
       // though typically this wouldn't change often.
-      UsersService.readUsersEndpointApiV1UsersGet()
+      UsersService.searchUsersEndpointApiV1UsersSearchGet('')
         .then((allUsers: UserRead[]) => {
           setAvailableParticipants(allUsers);
           // If current user exists, pre-select all *other* users by default when group changes.
@@ -193,7 +193,7 @@ const ExpenseCreatePage: React.FC = () => {
     } else {
       // If no group is selected, ensure available participants are all users.
       setLoadingInitialData(true);
-      UsersService.readUsersEndpointApiV1UsersGet()
+      UsersService.searchUsersEndpointApiV1UsersSearchGet('')
         .then(setAvailableParticipants)
         .catch((err: any) => {
           console.error("Failed to fetch users:", err);

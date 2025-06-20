@@ -12,12 +12,13 @@ import { request as __request } from '../core/request';
 export class BetaService {
 
     /**
-     * Register Interest
+     * Register Interest for Beta Program
+     * Allows users to register their interest in the beta program by providing their email.
      * @param requestBody
      * @returns BetaInterestResponse Successful Response
      * @throws ApiError
      */
-    public static registerInterestBetaInterestPost(
+    public static registerBetaInterestBetaInterestPost(
         requestBody: BetaInterestCreate,
     ): CancelablePromise<BetaInterestResponse> {
         return __request(OpenAPI, {
@@ -26,6 +27,7 @@ export class BetaService {
             body: requestBody,
             mediaType: 'application/json',
             errors: {
+                404: `Not found`,
                 422: `Validation Error`,
             },
         });

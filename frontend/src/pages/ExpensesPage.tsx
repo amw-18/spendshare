@@ -46,13 +46,13 @@ const ExpenseListPage: React.FC = () => {
 
         if (userIdsToFetch.size > 0) {
           fetchPromises.push(
-            UsersService.readUsersEndpointApiV1UsersGet(undefined, undefined)
-              .then(allUsers => {
+                        UsersService.searchUsersEndpointApiV1UsersSearchGet('')
+              .then((allUsers: UserRead[]) => {
                 const uMap: Record<number, UserRead> = {};
-                allUsers.forEach(u => { uMap[u.id] = u; });
+                allUsers.forEach((u: UserRead) => { uMap[u.id] = u; });
                 setUsersMap(uMap);
               })
-              .catch(userFetchError => {
+              .catch((userFetchError: any) => {
                 console.error("Failed to fetch all users for mapping:", userFetchError);
               })
           );

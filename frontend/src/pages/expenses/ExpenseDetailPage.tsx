@@ -10,7 +10,7 @@ import {
   // ExpenseParticipantReadWithUser, // This is not directly exported, but part of ExpenseRead
 } from '../../generated/api';
 import { useAuthStore } from '../../store/authStore';
-import { ArrowLeftIcon, PencilSquareIcon, TrashIcon, CalendarDaysIcon, UserCircleIcon, UserGroupIcon, CurrencyDollarIcon, UsersIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, PencilSquareIcon, TrashIcon, CalendarDaysIcon, UserCircleIcon, UserGroupIcon, UsersIcon } from '@heroicons/react/24/outline';
 
 const ExpenseDetailPage: React.FC = () => {
   const { expenseId } = useParams<{ expenseId: string }>();

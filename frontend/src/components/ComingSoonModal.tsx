@@ -13,54 +13,51 @@ const ComingSoonModal: React.FC<ComingSoonModalProps> = ({
 }) => {
   const [email, setEmail] = useState('');
   const [description, setDescription] = useState('');
-  const [canSubmitInterest, setCanSubmitInterest] = useState(false);
-  const [interactionDetected, setInteractionDetected] = useState(false);
-  const [timerExpired, setTimerExpired] = useState(false);
+  const [isSticky, setIsSticky] = useState(false);
+  const timerId = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    let timerId: NodeJS.Timeout | undefined;
-
     if (isOpen) {
-      // Reset states for new modal opening
-      setEmail('');
-      setDescription('');
-      setCanSubmitInterest(false);
-      setInteractionDetected(false);
-      setTimerExpired(false);
-
-      timerId = setTimeout(() => {
-        if (!interactionDetected) {
-          // If no interaction within 10 seconds, mark timer as expired
-          // Form remains disabled because canSubmitInterest is still false
-          setTimerExpired(true);
-          // console.log("Timer expired, no interaction.");
-        }
-      }, 10000); // 10 seconds
+      setIsSticky(false);
+      // Start the auto-close timer
+      timerId.current = setTimeout(() => {
+        onClose();
+      }, 5000);
     }
 
     return () => {
-      if (timerId) {
-        clearTimeout(timerId);
+      if (timerId.current) {
+        clearTimeout(timerId.current);
       }
     };
-  }, [isOpen]); // Only re-run when isOpen changes
+  }, [isOpen, onClose]);
 
-  const handleInteraction = () => {
-    if (!interactionDetected && isOpen && !timerExpired) {
-      // console.log("Interaction detected!");
-      setInteractionDetected(true);
-      setCanSubmitInterest(true); // Enable form
-      // No need to clearTimeout here if the timer's effect is conditional on interactionDetected
+  const handleMouseEnter = () => {
+    if (!isSticky && timerId.current) {
+      clearTimeout(timerId.current);
+      timerId.current = null;
     }
   };
 
-  const isDisabled = !canSubmitInterest;
+  const handleMouseLeave = () => {
+    if (!isSticky && isOpen) {
+      timerId.current = setTimeout(() => {
+        onClose();
+      }, 5000);
+    }
+  };
+
+  const handleInputFocus = () => {
+    setIsSticky(true);
+    if (timerId.current) {
+      clearTimeout(timerId.current);
+      timerId.current = null;
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (canSubmitInterest) {
-      await onSubmit(email, description);
-    }
+    await onSubmit(email, description);
   };
 
   if (!isOpen) {
@@ -68,8 +65,16 @@ const ComingSoonModal: React.FC<ComingSoonModalProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75 backdrop-blur-sm">
-      <div className="bg-[#211a32] text-white p-6 sm:p-8 rounded-xl border border-[#433465] w-full max-w-md mx-4">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75 backdrop-blur-sm"
+      onClick={onClose} // Click outside to close
+    >
+      <div 
+        className="bg-[#211a32] text-white p-6 sm:p-8 rounded-xl border border-[#433465] w-full max-w-md mx-4"
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        onClick={(e) => e.stopPropagation()} // Prevent click inside from closing modal
+      >
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Coming Soon</h2>
           <button
@@ -112,11 +117,9 @@ const ComingSoonModal: React.FC<ComingSoonModalProps> = ({
               name="beta-email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              onFocus={handleInteraction} // Detect interaction on focus
-              onClick={handleInteraction} // Detect interaction on click (for mobile mainly)
+              onFocus={handleInputFocus}
               required
-              disabled={isDisabled}
-              className="w-full px-3 py-2 bg-[#100c1c] text-white border border-[#2f2447] rounded-lg focus:ring-1 focus:ring-[#7847ea] focus:border-[#7847ea] transition-colors placeholder-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-3 py-2 bg-[#100c1c] text-white border border-[#2f2447] rounded-lg focus:ring-1 focus:ring-[#7847ea] focus:border-[#7847ea] transition-colors placeholder-gray-500"
               placeholder="you@example.com"
             />
           </div>
@@ -133,11 +136,9 @@ const ComingSoonModal: React.FC<ComingSoonModalProps> = ({
               name="beta-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              onFocus={handleInteraction} // Detect interaction on focus
-              onClick={handleInteraction} // Detect interaction on click
+              onFocus={handleInputFocus}
               rows={3}
-              disabled={isDisabled}
-              className="w-full px-3 py-2 bg-[#100c1c] text-white border border-[#2f2447] rounded-lg focus:ring-1 focus:ring-[#7847ea] focus:border-[#7847ea] transition-colors placeholder-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-3 py-2 bg-[#100c1c] text-white border border-[#2f2447] rounded-lg focus:ring-1 focus:ring-[#7847ea] focus:border-[#7847ea] transition-colors placeholder-gray-500"
               placeholder="Tell us about features you're excited for..."
             />
           </div>
@@ -145,16 +146,10 @@ const ComingSoonModal: React.FC<ComingSoonModalProps> = ({
           <div>
             <button
               type="submit"
-              disabled={isDisabled}
-              className="w-full h-11 px-6 bg-[#7847ea] hover:bg-[#6c3ddb] text-white font-semibold rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[#7847ea] focus:ring-offset-2 focus:ring-offset-[#211a32] disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full h-11 px-6 bg-[#7847ea] hover:bg-[#6c3ddb] text-white font-semibold rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[#7847ea] focus:ring-offset-2 focus:ring-offset-[#211a32]"
             >
               Register Interest
             </button>
-            {timerExpired && !interactionDetected && (
-              <p className="text-xs text-center text-[#a393c8] mt-2">
-                The beta interest registration period has ended for this session.
-              </p>
-            )}
           </div>
         </form>
       </div>

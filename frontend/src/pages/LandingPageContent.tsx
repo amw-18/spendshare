@@ -1,8 +1,8 @@
 import React, { useState } from 'react'; // Added useState
-import { Link } from 'react-router-dom';
+
 import { useAuthStore } from '../store/authStore';
 import ComingSoonModal from '../components/ComingSoonModal'; // Import the modal
-import { DefaultService as api } from '../generated/api'; // Assuming this path and service name
+import { BetaService as api } from '../generated/api'; // Assuming this path and service name
 
 // SVGs for icons - directly embedded for simplicity
 
@@ -56,7 +56,7 @@ const LandingPageContent: React.FC = () => {
       // Or if DefaultService is not used directly:
       // await betaBetaInterestPost({ requestBody: { email, description } });
       // For now, using a plausible call based on typical generation patterns.
-      await api.registerInterestBetaInterestPost({ email, description });
+      await api.registerBetaInterestBetaInterestPost({ email, description });
 
       setIsModalOpen(false);
       alert('Thank you for your interest! We will be in touch.'); // Simple alert for now
@@ -76,7 +76,6 @@ const LandingPageContent: React.FC = () => {
       {/* Hero Section */}
       <section className="relative flex flex-col items-center justify-center gap-6 self-stretch overflow-hidden px-6 py-20 md:py-28 lg:py-32">
         <div className="absolute inset-0 size-full bg-gradient-to-b from-[#161122] to-[#1c162c]/0 opacity-50"></div>
-        <div className="absolute inset-0 size-full bg-[url('https://uploads-ssl.webflow.com/646f65e37fe0275cfb808405/646f66cdeeb4ddfdae25a26e_Background%20Pattern%20(1).svg')] bg-center opacity-30"></div>
         
         <div className="relative z-10 flex flex-col items-center gap-6 text-center">
           <h1 className="text-4xl font-bold leading-tight tracking-[-0.015em] text-white md:text-5xl lg:text-6xl">
@@ -88,19 +87,11 @@ const LandingPageContent: React.FC = () => {
           <div className="flex flex-col items-center gap-4 sm:flex-row">
             <button
               onClick={() => setIsModalOpen(true)}
-              disabled // Visually disabled, but onClick still works to open modal
-              className="flex min-w-[160px] max-w-[480px] items-center justify-center overflow-hidden rounded-full h-12 px-6 bg-[#7847ea] text-white text-base font-semibold leading-normal tracking-[0.015em] transition-colors hover:bg-[#6c3ddb] focus:ring-2 focus:ring-[#7847ea]/50 disabled:opacity-70 disabled:cursor-not-allowed"
-              title="Feature coming soon! Register your interest."
+              className="flex min-w-[160px] max-w-[480px] items-center justify-center overflow-hidden rounded-full h-12 px-6 bg-[#7847ea] text-white text-base font-semibold leading-normal tracking-[0.015em] transition-colors hover:bg-[#6c3ddb] focus:ring-2 focus:ring-[#7847ea]/50"
             >
-              Get Started for Free
+              Get Started
             </button>
-            {/* "Learn More" can remain a Link or also be changed if needed */}
-            <Link
-              to="#how-it-works"
-              className="flex min-w-[160px] max-w-[480px] items-center justify-center overflow-hidden rounded-full h-12 px-6 bg-transparent text-[#a393c8] text-base font-semibold leading-normal tracking-[0.015em] transition-colors hover:text-white border border-solid border-[#a393c8]/50 hover:border-white focus:ring-2 focus:ring-white/50"
-            >
-              Learn More
-            </Link>
+            
           </div>
         </div>
       </section>
@@ -161,8 +152,13 @@ const LandingPageContent: React.FC = () => {
             description="View balances and settle debts with friends using your preferred cryptocurrency."
           />
         </div>
-        <div className="mt-6 md:mt-8">
-          <img src="https://via.placeholder.com/800x450?text=App+Screenshot+or+Illustration" alt="SpendShare App Illustration" className="rounded-lg shadow-xl" />
+        <div className="mt-6 md:mt-8 w-full max-w-5xl flex flex-col items-end gap-4">
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="flex min-w-[160px] items-center justify-center rounded-full h-12 px-6 bg-[#7847ea] text-white text-lg font-semibold leading-normal tracking-[0.015em] transition-colors hover:bg-[#6c3ddb] focus:ring-2 focus:ring-[#7847ea]/50"
+          >
+            Try It
+          </button>
         </div>
       </section>
 
@@ -178,11 +174,9 @@ const LandingPageContent: React.FC = () => {
         </div>
         <button
           onClick={() => setIsModalOpen(true)}
-          disabled // Visually disabled
-          className="flex min-w-[200px] max-w-[480px] items-center justify-center overflow-hidden rounded-full h-12 px-8 bg-[#7847ea] text-white text-lg font-semibold leading-normal tracking-[0.015em] transition-colors hover:bg-[#6c3ddb] focus:ring-2 focus:ring-[#7847ea]/50 disabled:opacity-70 disabled:cursor-not-allowed"
-          title="Feature coming soon! Register your interest."
+          className="flex min-w-[200px] max-w-[480px] items-center justify-center overflow-hidden rounded-full h-12 px-8 bg-[#7847ea] text-white text-lg font-semibold leading-normal tracking-[0.015em] transition-colors hover:bg-[#6c3ddb] focus:ring-2 focus:ring-[#7847ea]/50"
         >
-          {isLoggedIn ? 'Go to Dashboard (Soon)' : 'Sign Up Now (Soon)'}
+          {isLoggedIn ? 'Go to Dashboard' : 'Sign Up Now'}
         </button>
         <div className="flex items-center gap-3 pt-4">
           <CheckCircleIcon />
