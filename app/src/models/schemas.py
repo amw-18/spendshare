@@ -12,8 +12,9 @@ class Token(BaseModel):
 
 # User Schemas
 class UserBase(SQLModel):
-    username: constr(min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9_-]+$")
+    username: str = Field(..., min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9_-]+$")
     email: EmailStr
+    full_name: Optional[str] = Field(None, max_length=100)
 
     @field_validator("username")
     @classmethod
@@ -29,8 +30,26 @@ class UserBase(SQLModel):
         return v
 
 
-class UserCreate(UserBase):
-    password: constr(min_length=8)
+class UserRegister(BaseModel): # Not SQLModel, as it's for input validation primarily
+    email: EmailStr
+    password: str = Field(..., min_length=8)
+    username: str = Field(..., min_length=3, max_length=50, pattern="^[a-zA-Z0-9_-]+$")
+    full_name: Optional[str] = Field(None, max_length=100)
+
+    @field_validator("password") # You can keep validators if they are general enough
+    @classmethod
+    def password_must_contain_number(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("password must be at least 8 characters")
+        if not any(char.isdigit() for char in v):
+            raise ValueError("password must contain at least one number")
+        if not any(char.isalpha() for char in v):
+            raise ValueError("password must contain at least one letter")
+        return v
+
+
+class UserCreate(UserBase): # This can remain for admin creation or internal use
+    password: str = Field(..., min_length=8) # Use str and Field for consistency
 
     @field_validator("password")
     @classmethod
@@ -46,12 +65,15 @@ class UserCreate(UserBase):
 
 class UserRead(UserBase):
     id: int
+    email_verified: bool
+    # full_name is inherited from UserBase now
 
 
 class UserUpdate(SQLModel):
-    username: Optional[str] = None
-    email: Optional[EmailStr] = None
-    password: Optional[constr(min_length=8)] = None
+    username: Optional[str] = Field(None, min_length=3, max_length=50, pattern="^[a-zA-Z0-9_-]+$")
+    password: Optional[str] = Field(None, min_length=8) # For changing password
+    full_name: Optional[str] = Field(None, max_length=100)
+    # Email cannot be updated here, must use dedicated flow
 
     @field_validator("password")
     @classmethod
@@ -82,6 +104,20 @@ class UserUpdate(SQLModel):
                 "username must only contain letters, numbers, hyphens, and underscores"
             )
         return v
+
+
+# Message Response Schema
+class MessageResponse(BaseModel):
+    message: str
+
+# Resend Verification Email Request Schema
+class ResendVerificationEmailRequest(BaseModel):
+    email: EmailStr
+
+# User Email Change Request Schema
+class UserEmailChangeRequest(BaseModel):
+    new_email: EmailStr
+    password: str # Current password
 
 
 # Group Schemas

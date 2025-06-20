@@ -2,34 +2,151 @@
   "openapi": "3.1.0",
   "info": {
     "title": "SpendShare API - Development",
-    "description": "API for managing expenses, users, and groups in SpendShare.",
-    "version": "0.1.0"
+    "description": "API for managing expenses, users, and groups in SpendShare. Includes email verification workflow.",
+    "version": "0.1.1"
   },
   "paths": {
-    "/api/v1/users/": {
+    "/api/v1/users/register": {
       "post": {
         "tags": [
           "users"
         ],
-        "summary": "Create User Endpoint",
-        "operationId": "create_user_endpoint_api_v1_users__post",
+        "summary": "Register User",
+        "description": "Initiates user registration. Creates a pending user and sends a verification email. The account is not active until the email is verified.",
+        "operationId": "register_user_api_v1_users_register_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UserCreate"
+                "$ref": "#/components/schemas/UserRegister"
               }
             }
           },
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "Successful Response",
+          "202": {
+            "description": "Registration initiated, verification pending.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UserRead"
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request (e.g., email already exists and is verified, or pending and token still valid, or username taken)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/verify-email": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Verify Email Address",
+        "description": "Verifies a user's email address using a token sent during registration. This is a public endpoint accessed via a link.",
+        "operationId": "verify_email_api_v1_users_verify_email_get",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Token"
+            },
+            "description": "The email verification token."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Email verified successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid, expired, or already used token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error (e.g., token format incorrect)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/resend-verification-email": {
+      "post": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Resend Verification Email",
+        "description": "Resends the email verification link if the previous one expired or was not received. Applies to users in a pending verification state.",
+        "operationId": "resend_verification_email_api_v1_users_resend_verification_email_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResendVerificationEmailRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Verification email has been resent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Email not found in a state eligible for resending verification (e.g., already verified or never registered).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
                 }
               }
             }
@@ -53,7 +170,7 @@
           "users"
         ],
         "summary": "Search Users Endpoint",
-        "description": "Search for users by username or email.\nReturns a list of users matching the query.\nAccessible to any authenticated user.",
+        "description": "Search for users by username or email. Returns a list of users matching the query. Accessible to any authenticated user. Only returns verified users.",
         "operationId": "search_users_endpoint_api_v1_users_search_get",
         "security": [
           {
@@ -105,7 +222,7 @@
           "users"
         ],
         "summary": "Read Current User Me Endpoint",
-        "description": "Get current logged-in user.",
+        "description": "Get current logged-in and verified user.",
         "operationId": "read_current_user_me_endpoint_api_v1_users_me_get",
         "responses": {
           "200": {
@@ -126,12 +243,124 @@
         ]
       }
     },
+    "/api/v1/users/me/email": {
+      "put": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Change User Email",
+        "description": "Initiates the process for a logged-in user to change their email address. A verification email will be sent to the new address. The email is not updated until verified.",
+        "operationId": "change_user_email_api_v1_users_me_email_put",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserEmailChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Email change initiated. Check new email for verification.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request (e.g., new email same as old, new email already in use by another user, password incorrect)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/verify-email-change": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Verify Email Change",
+        "description": "Verifies a new email address for a user after they initiated an email change request. This is a public endpoint accessed via a link containing a token.",
+        "operationId": "verify_email_change_api_v1_users_verify_email_change_get",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Token"
+            },
+            "description": "The email change verification token."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Email change verified and updated successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid, expired, or already used token for email change.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/users/{user_id}": {
       "get": {
         "tags": [
           "users"
         ],
         "summary": "Read User Endpoint",
+        "description": "Gets a specific user by ID. Only returns verified users.",
         "operationId": "read_user_endpoint_api_v1_users__user_id__get",
         "security": [
           {
@@ -160,6 +389,16 @@
               }
             }
           },
+          "404": {
+            "description": "User not found or not verified.",
+             "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -177,6 +416,7 @@
           "users"
         ],
         "summary": "Update User Endpoint",
+        "description": "Updates a user's details (username, password, full_name). Email changes must go through the separate email change verification flow. Only affects verified users. User can only update their own details unless they are an admin.",
         "operationId": "update_user_endpoint_api_v1_users__user_id__put",
         "security": [
           {
@@ -215,6 +455,26 @@
               }
             }
           },
+          "403": {
+            "description": "Forbidden (user trying to update another user's details without admin rights)",
+             "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User not found or not verified.",
+             "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -232,6 +492,7 @@
           "users"
         ],
         "summary": "Delete User Endpoint",
+        "description": "Deletes a user. Only affects verified users. User can only delete their own account unless they are an admin.",
         "operationId": "delete_user_endpoint_api_v1_users__user_id__delete",
         "security": [
           {
@@ -251,12 +512,31 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Successful Response: User deleted (or marked as deleted)",
             "content": {
               "application/json": {
+                 "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden (user trying to delete another user's account without admin rights)",
+             "content": {
+              "application/json": {
                 "schema": {
-                  "type": "integer",
-                  "title": "Response Delete User Endpoint Api V1 Users  User Id  Delete"
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+           "404": {
+            "description": "User not found or not verified.",
+             "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
                 }
               }
             }
@@ -280,6 +560,7 @@
           "users"
         ],
         "summary": "Login For Access Token",
+        "description": "Provides an access token for successfully authenticated and verified users.",
         "operationId": "login_for_access_token_api_v1_users_token_post",
         "requestBody": {
           "content": {
@@ -298,6 +579,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Token"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized (e.g., incorrect username/password, or email not verified)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
                 }
               }
             }
@@ -1605,6 +1896,92 @@
   },
   "components": {
     "schemas": {
+      "MessageResponse": {
+        "title": "MessageResponse",
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "required": [
+          "message"
+        ]
+      },
+      "UserRegister": {
+        "title": "UserRegister",
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 8,
+            "title": "Password"
+          },
+          "full_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Name"
+          },
+          "username": {
+             "type": "string",
+             "maxLength": 50,
+             "minLength": 3,
+             "pattern": "^[a-zA-Z0-9_-]+$",
+             "title": "Username"
+          }
+        },
+        "required": [
+          "email",
+          "password",
+          "username"
+        ]
+      },
+      "ResendVerificationEmailRequest": {
+        "title": "ResendVerificationEmailRequest",
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "UserEmailChangeRequest": {
+        "title": "UserEmailChangeRequest",
+        "type": "object",
+        "properties": {
+          "new_email": {
+            "type": "string",
+            "format": "email",
+            "title": "New Email"
+          },
+          "password": {
+            "type": "string",
+            "title": "Current Password (for verification)"
+          }
+        },
+        "required": [
+          "new_email",
+          "password"
+        ]
+      },
       "Body_create_expense_with_participants_endpoint_api_v1_expenses_service__post": {
         "properties": {
           "expense_in": {
@@ -2554,7 +2931,8 @@
           "email",
           "password"
         ],
-        "title": "UserCreate"
+        "title": "UserCreate",
+        "description": "Schema for creating a user directly (e.g. by an admin). For public registration, use UserRegister. Assumes email is pre-verified or verification is handled externally."
       },
       "UserRead": {
         "properties": {
@@ -2573,13 +2951,31 @@
           "id": {
             "type": "integer",
             "title": "Id"
+          },
+          "email_verified": {
+            "type": "boolean",
+            "title": "Email Verified",
+            "description": "Indicates if the user has verified their email address."
+          },
+          "full_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Name"
           }
         },
         "type": "object",
         "required": [
           "username",
           "email",
-          "id"
+          "id",
+          "email_verified"
         ],
         "title": "UserRead"
       },
@@ -2588,25 +2984,16 @@
           "username": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 50,
+                "minLength": 3,
+                "pattern": "^[a-zA-Z0-9_-]+$"
               },
               {
                 "type": "null"
               }
             ],
             "title": "Username"
-          },
-          "email": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "email"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email"
           },
           "password": {
             "anyOf": [
@@ -2618,11 +3005,24 @@
                 "type": "null"
               }
             ],
-            "title": "Password"
+            "title": "Password (new password)"
+          },
+           "full_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Name"
           }
         },
         "type": "object",
-        "title": "UserUpdate"
+        "title": "UserUpdate",
+        "description": "Schema for updating user details (username, password, full_name). Email must be updated via the /users/me/email endpoint and subsequent verification."
       },
       "ValidationError": {
         "properties": {
