@@ -11,24 +11,65 @@ interface LayoutProps {
 const SpendShareLogo = () => (
   <div className="size-8">
     <svg fill="none" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
-      <path
-        d="M38 12H10C7.79086 12 6 13.7909 6 16V34C6 36.2091 7.79086 38 10 38H38C40.2091 38 42 36.2091 42 34V16C42 13.7909 40.2091 12 38 12Z"
-        fill="rgba(22, 17, 34, 0.8)"
-        stroke="#7847EA" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3"
-      ></path>
-      <path
-        d="M14 25C15.6569 25 17 23.6569 17 22C17 20.3431 15.6569 19 14 19C12.3431 19 11 20.3431 11 22C11 23.6569 12.3431 25 14 25Z"
-        fill="#7847EA"
-      ></path>
-      <path
-        d="M24 30C26.2091 30 28 28.2091 28 26C28 23.7909 26.2091 22 24 22C21.7909 22 20 23.7909 20 26C20 28.2091 21.7909 30 24 30Z"
-        fill="#7847EA"
-      ></path>
-      <path
-        d="M34 21C35.6569 21 37 19.6569 37 18C37 16.3431 35.6569 15 34 15C32.3431 15 31 16.3431 31 18C31 19.6569 32.3431 21 34 21Z"
-        fill="#7847EA"
-      ></path>
-      <path d="M14 22L24 26L34 18" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"></path>
+      <defs>
+        {/* Background gradient */}
+        <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style={{stopColor:"#7847EA", stopOpacity:1}} />
+          <stop offset="50%" style={{stopColor:"#A855F7", stopOpacity:1}} />
+          <stop offset="100%" style={{stopColor:"#C084FC", stopOpacity:1}} />
+        </linearGradient>
+        
+        {/* Card gradient */}
+        <linearGradient id="cardGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style={{stopColor:"#1C162C", stopOpacity:0.95}} />
+          <stop offset="100%" style={{stopColor:"#161122", stopOpacity:0.9}} />
+        </linearGradient>
+        
+        {/* Node glow effect */}
+        <filter id="glow">
+          <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
+          <feMerge> 
+            <feMergeNode in="coloredBlur"/>
+            <feMergeNode in="SourceGraphic"/>
+          </feMerge>
+        </filter>
+        
+        {/* Connection line gradient */}
+        <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" style={{stopColor:"#10B981", stopOpacity:1}} />
+          <stop offset="50%" style={{stopColor:"#06B6D4", stopOpacity:1}} />
+          <stop offset="100%" style={{stopColor:"#8B5CF6", stopOpacity:1}} />
+        </linearGradient>
+      </defs>
+      
+      {/* Outer glow circle */}
+      <circle cx="24" cy="24" r="23" fill="url(#bgGradient)" opacity="0.3" filter="url(#glow)"/>
+      
+      {/* Main card background with rounded corners and gradient */}
+      <rect x="4" y="10" width="40" height="28" rx="5" ry="5" fill="url(#cardGradient)" stroke="url(#bgGradient)" strokeWidth="2"/>
+      
+      {/* Inner highlight for depth */}
+      <rect x="5" y="11" width="38" height="1.5" rx="2" fill="rgba(255,255,255,0.2)"/>
+      
+      {/* Connection nodes with improved styling */}
+      {/* Left node (sender) */}
+      <circle cx="13" cy="22" r="5" fill="#10B981" filter="url(#glow)"/>
+      <circle cx="13" cy="22" r="3.5" fill="#34D399"/>
+      <text x="13" y="27" textAnchor="middle" fontFamily="Arial, sans-serif" fontSize="7" fill="#10B981" fontWeight="bold">$</text>
+      
+      {/* Center node (platform) */}
+      <circle cx="24" cy="26" r="6" fill="#06B6D4" filter="url(#glow)"/>
+      <circle cx="24" cy="26" r="4.5" fill="#22D3EE"/>
+      <polygon points="24,22.5 27,29.5 21,29.5" fill="white"/>
+      
+      {/* Right node (receiver) */}
+      <circle cx="35" cy="18" r="5" fill="#8B5CF6" filter="url(#glow)"/>
+      <circle cx="35" cy="18" r="3.5" fill="#A78BFA"/>
+      <text x="35" y="23" textAnchor="middle" fontFamily="Arial, sans-serif" fontSize="7" fill="#8B5CF6" fontWeight="bold">₿</text>
+      
+      {/* Enhanced connection lines with gradient and glow */}
+      <path d="M13 22 L24 26 L35 18" stroke="url(#lineGradient)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" fill="none" opacity="0.9"/>
+      <path d="M13 22 L24 26 L35 18" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" opacity="0.7"/>
     </svg>
   </div>
 );
