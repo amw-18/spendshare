@@ -31,76 +31,118 @@ async def create_expense_with_participants_endpoint(
     *,
     session: AsyncSession = Depends(get_session),
     expense_in: schemas.ExpenseCreate,
-    participant_user_ids: List[int] = Body(...),
     current_user: User = Depends(get_current_user),
 ) -> schemas.ExpenseRead:
     # Validate currency_id
-    await get_object_or_404(session, Currency, expense_in.currency_id)
+    await get_object_or_404(session, Currency, expense_in.currency_id, "Currency not found.")
 
+    # Validate group_id if provided
     if expense_in.group_id:
-        group = await get_object_or_404(session, Group, expense_in.group_id)
-        # Not assigning to 'group' as it's not used later, just checked for existence.
+        await get_object_or_404(session, Group, expense_in.group_id, "Group not found.")
 
-    all_participants_in_expense_users = []
-    users_sharing_expense_ids = set(participant_user_ids)
-    if not participant_user_ids:  # If list is empty, payer is the only participant
-        users_sharing_expense_ids.add(current_user.id)
+    participants_for_db = []
 
-    for participant_id in users_sharing_expense_ids:
-        participant = await get_object_or_404(session, User, participant_id)
-        all_participants_in_expense_users.append(participant)
+    try:
+        if expense_in.participant_shares:
+            # Case 1: Custom shares are provided
+            seen_user_ids = set()
+            sum_of_shares = 0.0
 
-    db_expense = Expense.model_validate(
-        expense_in, update={"paid_by_user_id": current_user.id}
-    )
-    session.add(db_expense)
-    await session.commit()
-    await session.refresh(db_expense)  # Refresh to get db_expense.id
+            for share_detail in expense_in.participant_shares:
+                # Validate participant user_id
+                await get_object_or_404(session, User, share_detail.user_id, f"Participant user ID {share_detail.user_id} not found.")
 
-    num_participants = len(all_participants_in_expense_users)
-    share_amount = None
-    if num_participants > 0:
-        share_amount = round(db_expense.amount / num_participants, 2)
+                # Check for duplicate user_ids in the input
+                if share_detail.user_id in seen_user_ids:
+                    await session.rollback()
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail=f"Duplicate user ID {share_detail.user_id} in participant shares.",
+                    )
+                seen_user_ids.add(share_detail.user_id)
+                sum_of_shares += share_detail.share_amount
+                participants_for_db.append(
+                    {"user_id": share_detail.user_id, "share_amount": share_detail.share_amount}
+                )
 
-    for user_obj in all_participants_in_expense_users:
-        expense_participant = ExpenseParticipant(
-            user_id=user_obj.id,
-            expense_id=db_expense.id,
-            share_amount=share_amount,
+            # Validate sum of shares against total expense amount
+            # Using a small tolerance for float comparison (e.g., 0.01 for currency)
+            if abs(sum_of_shares - expense_in.amount) > 1e-2: # Adjusted tolerance for currency
+                await session.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Sum of participant shares ({sum_of_shares:.2f}) does not match total expense amount ({expense_in.amount:.2f}).",
+                )
+        else:
+            # Case 2: No custom shares provided, payer is the only participant
+            # Validate current_user.id (though typically guaranteed by Depends)
+            await get_object_or_404(session, User, current_user.id, "Current user not found.")
+            participants_for_db.append(
+                {"user_id": current_user.id, "share_amount": expense_in.amount}
+            )
+
+        # Create the Expense object
+        db_expense = Expense.model_validate(
+            expense_in, update={"paid_by_user_id": current_user.id}
         )
-        session.add(expense_participant)
+        session.add(db_expense)
+        await session.flush()  # Assigns an ID to db_expense
 
-    await session.commit()
-    await session.refresh(db_expense)  # Refresh again after adding participants
+        # Create ExpenseParticipant objects
+        for participant_data in participants_for_db:
+            expense_participant = ExpenseParticipant(
+                expense_id=db_expense.id,  # Use the flushed expense ID
+                user_id=participant_data["user_id"],
+                share_amount=participant_data["share_amount"],
+            )
+            session.add(expense_participant)
 
-    # Re-fetch with relationships for ExpenseRead using a select statement
-    stmt = (
-        select(Expense)
-        .where(Expense.id == db_expense.id)
-        .options(
-            selectinload(Expense.currency),
-            selectinload(Expense.paid_by),
-            selectinload(Expense.group),
-            selectinload(Expense.all_participant_details)
-            .selectinload(ExpenseParticipant.user)
-            .selectinload(User.groups),  # For UserRead in participant
-            selectinload(Expense.all_participant_details)
-            .selectinload(ExpenseParticipant.transaction)
-            .selectinload(Transaction.currency),  # For settlement details
+        await session.commit()
+        await session.refresh(db_expense) # Refresh to get any DB-side updates on db_expense itself
+
+        # Re-fetch the expense with all necessary relationships for the response
+        # This ensures all related data, especially from ExpenseParticipant, is loaded
+        stmt = (
+            select(Expense)
+            .where(Expense.id == db_expense.id)
+            .options(
+                selectinload(Expense.currency),
+                selectinload(Expense.paid_by),
+                selectinload(Expense.group),
+                # Participant details are loaded by _get_expense_read_details
+                # We don't need to explicitly load Expense.all_participant_details here
+                # as _get_expense_read_details will query them based on db_expense.id
+            )
         )
-    )
-    result = await session.exec(stmt)
-    refreshed_db_expense = result.one_or_none()
+        result = await session.exec(stmt)
+        refreshed_db_expense_for_response = result.one_or_none()
 
-    if not refreshed_db_expense:
+        if not refreshed_db_expense_for_response:
+            # This case should ideally not happen if commit was successful
+            # but it's a safeguard.
+            # No rollback here as data is already committed. Error indicates a fetch issue.
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to re-fetch expense after creation for response.",
+            )
+
+        return await _get_expense_read_details(
+            session=session, db_expense=refreshed_db_expense_for_response
+        )
+
+    except HTTPException:
+        # If it's an HTTPException we raised (e.g. 422, 404), rollback was likely called.
+        # Re-raise it to be handled by FastAPI.
+        await session.rollback() # Ensure rollback on any HTTPException during the try block
+        raise
+    except Exception as e:
+        # For any other unexpected exceptions, rollback and raise a generic 500.
+        await session.rollback()
+        # Log the exception e for debugging if logging is set up
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to re-fetch expense after creation with full details",
+            detail=f"An unexpected error occurred: {str(e)}",
         )
-
-    return await _get_expense_read_details(
-        session=session, db_expense=refreshed_db_expense
-    )
 
 
 @router.post(
@@ -264,7 +306,6 @@ async def read_expense_endpoint(
     return await _get_expense_read_details(session=session, db_expense=db_expense)
 
 
-# TODO:  audit/test this properly
 @router.put("/{expense_id}", response_model=schemas.ExpenseRead)
 async def update_expense_endpoint(
     *,
@@ -273,182 +314,203 @@ async def update_expense_endpoint(
     expense_in: schemas.ExpenseUpdate,
     current_user: User = Depends(get_current_user),
 ) -> schemas.ExpenseRead:
-    # TODO:
-    # if the expense is in group, any group member should be allowed
-    # otherwise, only the participants    # Fetch the expense with eager loading for currency and paid_by
+    # I. Authorization and Initial Setup
     db_expense = await session.get(
         Expense,
         expense_id,
         options=[
-            selectinload(Expense.currency),
             selectinload(Expense.paid_by),
-            selectinload(Expense.group),
-            selectinload(Expense.all_participant_details).options(
-                selectinload(ExpenseParticipant.user),
-                selectinload(ExpenseParticipant.transaction).selectinload(
-                    Transaction.currency
-                ),
-            ),
+            selectinload(Expense.group).selectinload(Group.members), # For group membership check
+            selectinload(Expense.all_participant_details).selectinload(ExpenseParticipant.user), # For participant check
         ],
     )
+
     if not db_expense:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Expense with id {expense_id} not found",
         )
-    # Update basic expense fields first
-    expense_data = expense_in.model_dump(exclude_unset=True)
 
-    # Keep track if amount changed for share recalculation
-    amount_changed = (
-        "amount" in expense_data and expense_data["amount"] != db_expense.amount
-    )
+    # Authorization Logic
+    can_edit = False
+    if db_expense.paid_by_user_id == current_user.id:
+        can_edit = True
+    elif db_expense.group and any(member.id == current_user.id for member in db_expense.group.members):
+        can_edit = True
+    elif not db_expense.group and any(ep.user_id == current_user.id for ep in db_expense.all_participant_details):
+        can_edit = True
 
-    # Temporarily remove 'participants' from expense_data if it exists, handle it separately
-    updated_participant_user_ids_input: Optional[List[int]] = None
-    if "participants" in expense_data:
-        participants_input_list = expense_data.pop("participants")
-        if participants_input_list is not None:
-            # The input `p` here is a dict from the JSON payload, not a ParticipantUpdate model instance directly from Pydantic parsing at this stage.
-            updated_participant_user_ids_input = [
-                p["user_id"] for p in participants_input_list
-            ]
-
-    for key, value in expense_data.items():
-        setattr(db_expense, key, value)
-
-    # Fetch existing participants from DB
-    existing_participants_statement = select(ExpenseParticipant).where(
-        ExpenseParticipant.expense_id == db_expense.id
-    )
-    result = await session.exec(existing_participants_statement)
-    existing_participant_links = result.all()
-    existing_participant_user_ids = {
-        link.user_id for link in existing_participant_links
-    }
-
-    final_participant_user_ids = set(
-        existing_participant_user_ids
-    )  # Start with current participants
-
-    if (
-        updated_participant_user_ids_input is not None
-    ):  # If 'participants' was in the input payload
-        # Validate all incoming participant user_ids
-        for user_id in updated_participant_user_ids_input:
-            await get_object_or_404(session, User, user_id)  # Ensures user exists
-
-        incoming_participant_user_ids_set = set(updated_participant_user_ids_input)
-
-        # Determine users to remove
-        user_ids_to_remove = (
-            existing_participant_user_ids - incoming_participant_user_ids_set
-        )
-        for link_to_delete in [
-            link
-            for link in existing_participant_links
-            if link.user_id in user_ids_to_remove
-        ]:
-            await session.delete(link_to_delete)
-
-        final_participant_user_ids = incoming_participant_user_ids_set
-        # Links for new users will be created/updated during share recalculation
-        amount_changed = (
-            True  # Force share recalculation if participants list is explicitly set
+    if not can_edit:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to update this expense.",
         )
 
-    # Recalculate shares if amount changed or if participant list was explicitly provided
-    if amount_changed and final_participant_user_ids:
-        new_share_amount = round(db_expense.amount / len(final_participant_user_ids), 2)
+    try:
+        # II. Processing Input and Basic Field Updates
+        update_data = expense_in.model_dump(exclude_unset=True)
+        new_participants_input_list = update_data.pop("participants", None)
 
-        # Update existing or create new participant links
-        current_links_map = {link.user_id: link for link in existing_participant_links}
+        amount_changed = False
+        current_expense_amount = round(db_expense.amount, 2)
 
-        for user_id in final_participant_user_ids:
-            if user_id in current_links_map:
-                # User was already a participant, update their share
-                link = current_links_map[user_id]
-                if (
-                    link.user_id not in user_ids_to_remove
-                    if updated_participant_user_ids_input is not None
-                    else True
-                ):  # Check if not marked for removal
-                    link.share_amount = new_share_amount
+        if "amount" in update_data:
+            new_proposed_amount = round(update_data["amount"], 2)
+            # Use a small tolerance for float comparison
+            if abs(new_proposed_amount - round(db_expense.amount, 2)) > 1e-9: # Compare with original rounded amount
+                amount_changed = True
+            current_expense_amount = new_proposed_amount # This will be the amount to validate shares against
+            db_expense.amount = new_proposed_amount # Actual field update
+            # Remove amount from update_data as it's handled
+            update_data.pop("amount")
+
+
+        # Update other mutable fields
+        if "currency_id" in update_data:
+            new_currency_id = update_data.pop("currency_id")
+            if new_currency_id is not None: # Schema allows Optional for update
+                 await get_object_or_404(session, Currency, new_currency_id, "Currency not found.")
+                 db_expense.currency_id = new_currency_id
+
+        if "group_id" in update_data:
+            new_group_id = update_data.pop("group_id")
+            # group_id can be None to remove expense from a group
+            if new_group_id is not None:
+                await get_object_or_404(session, Group, new_group_id, "Group not found.")
+            db_expense.group_id = new_group_id
+
+        # Update remaining fields like description
+        for key, value in update_data.items():
+            setattr(db_expense, key, value)
+
+        session.add(db_expense) # Add changes so far, including amount, currency, group, description
+
+        # III. Handling Participant Updates (if new_participants_input_list is provided)
+        if new_participants_input_list is not None:
+            # Delete Existing Participants
+            for link in db_expense.all_participant_details:
+                await session.delete(link)
+            db_expense.all_participant_details = [] # Clear local collection
+            await session.flush() # Process deletions in DB
+
+            new_shares_to_create = []
+            calculated_sum_of_new_shares = 0.0
+            user_ids_in_new_list = set()
+
+            if not new_participants_input_list: # Empty list [] was provided
+                # If expense amount is not zero, this is an error.
+                # Using 1e-2 as tolerance for "non-zero" amount check
+                if abs(current_expense_amount - 0.0) > 1e-2:
+                    await session.rollback()
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail="Empty participant list provided for a non-zero expense amount."
+                    )
+                # If amount is zero and participants list is empty, it's fine. No participants to add.
+            else: # List has items
+                for p_dict in new_participants_input_list:
+                    user_id = p_dict.get("user_id")
+                    share_amount_input = p_dict.get("share_amount")
+
+                    if user_id is None or share_amount_input is None:
+                        await session.rollback()
+                        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Each participant must have user_id and share_amount.")
+
+                    share_amount = round(float(share_amount_input), 2) # Ensure float and round
+
+                    if share_amount <= 1e-9: # Effectively checks for positive amount
+                        await session.rollback()
+                        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Share amount must be positive.")
+
+                    if user_id in user_ids_in_new_list:
+                        await session.rollback()
+                        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Duplicate user_id {user_id} in input.")
+
+                    await get_object_or_404(session, User, user_id, f"Participant user ID {user_id} not found.")
+                    user_ids_in_new_list.add(user_id)
+                    new_shares_to_create.append({"user_id": user_id, "share_amount": share_amount})
+                    calculated_sum_of_new_shares += share_amount
+
+                calculated_sum_of_new_shares = round(calculated_sum_of_new_shares, 2)
+                # Using 1e-2 tolerance for currency sum validation
+                if abs(calculated_sum_of_new_shares - current_expense_amount) > 1e-2:
+                    await session.rollback()
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail=f"Sum of new shares ({calculated_sum_of_new_shares:.2f}) does not equal expense amount ({current_expense_amount:.2f})."
+                    )
+
+            # Create New ExpenseParticipant Records
+            for s_info in new_shares_to_create:
+                ep = ExpenseParticipant(user_id=s_info['user_id'], expense_id=db_expense.id, share_amount=s_info['share_amount'])
+                session.add(ep)
+                db_expense.all_participant_details.append(ep) # Keep local model in sync
+            amount_changed = True # Shares were explicitly set, treat as amount/share change for recalculation logic avoidance
+
+        # IV. Handling Amount Change WITHOUT Explicit Participant Update
+        elif new_participants_input_list is None and amount_changed:
+            current_participants = db_expense.all_participant_details # Already loaded
+            if current_participants: # Only if there are existing participants
+                num_participants = len(current_participants)
+                new_equal_share = round(current_expense_amount / num_participants, 2)
+
+                recalculated_sum = 0.0
+                for idx, link in enumerate(current_participants):
+                    link.share_amount = new_equal_share
                     session.add(link)
-            else:
-                # New participant, create a new link
-                new_link = ExpenseParticipant(
-                    expense_id=db_expense.id,
-                    user_id=user_id,
-                    share_amount=new_share_amount,
-                )
-                session.add(new_link)
-    elif (
-        amount_changed and not final_participant_user_ids and existing_participant_links
-    ):
-        # Amount changed, but no participants specified in input, and no final participants (e.g. all removed)
-        # This means all existing links should be removed if any existed before an explicit empty list.
-        # This case is mostly covered if updated_participant_user_ids_input was an empty list.
-        # If updated_participant_user_ids_input was None, and amount changed, and there are existing participants,
-        # their shares should ideally be updated. This specific edge case might need refinement.
-        # For now, if final_participant_user_ids is empty, all links are already removed or will be.
-        pass
+                    recalculated_sum += new_equal_share
 
-    # Handle paid_by_user_id and group_id checks after basic attributes are set on db_expense
-    if (
-        db_expense.paid_by_user_id is not None
-    ):  # Check if it was set by the update or existed before
-        await get_object_or_404(session, User, db_expense.paid_by_user_id)
+                recalculated_sum = round(recalculated_sum, 2)
+                # Adjust for rounding differences on the first participant
+                if abs(recalculated_sum - current_expense_amount) > 1e-9: # Use small tolerance for this adjustment
+                    remainder = round(current_expense_amount - recalculated_sum, 2)
+                    current_participants[0].share_amount = round(current_participants[0].share_amount + remainder, 2)
+                    session.add(current_participants[0])
+            # If no current participants and amount changes, it implies the payer (current_user) now bears the full new amount.
+            # This case needs to be handled: if no participants, and amount changed, who pays?
+            # For now, if no participants and amount changed, and no new list, it's an implicit single-payer expense (the original payer).
+            # The current logic correctly updates db_expense.amount. If there are no participant links, no shares need updating.
+            # If the intention is to automatically add the payer as a participant if none exist, that needs explicit logic.
+            # Given the problem, we assume existing participants (if any) split the new total, or new participants are provided.
+            # If no participants exist AND no new ones are provided, it's ok, implies payer covers all.
 
-    if (
-        db_expense.group_id is not None
-    ):  # Check if it was set by the update or existed before
-        # Example TODOs from original code, kept for context if relevant to other logic
-        # if db_expense.group_id == 0:
-        #     pass
-        # else:
-        await get_object_or_404(session, Group, db_expense.group_id)
+        # V. Commit and Respond
+        await session.commit()
+        await session.refresh(db_expense) # Refresh db_expense itself
 
-    if "currency_id" in expense_data and expense_data["currency_id"] is not None:
-        await get_object_or_404(session, Currency, expense_data["currency_id"])
-        # setattr will handle the update of db_expense.currency_id
-
-    session.add(db_expense)
-    await session.commit()
-    await session.refresh(db_expense)
-
-    # Re-fetch with relationships for ExpenseRead using a select statement
-    stmt = (
-        select(Expense)
-        .where(Expense.id == db_expense.id)
-        .options(
-            selectinload(Expense.currency),
-            selectinload(Expense.paid_by),
-            selectinload(Expense.group),
-            selectinload(Expense.all_participant_details).options(
-                selectinload(ExpenseParticipant.user).selectinload(User.groups)
-            ),
-            selectinload(Expense.all_participant_details).options(
-                selectinload(ExpenseParticipant.transaction).selectinload(
-                    Transaction.currency
-                )
-            ),
+        # For the response, reload the expense with relations needed by _get_expense_read_details
+        stmt = (
+            select(Expense)
+            .where(Expense.id == expense_id)
+            .options(
+                selectinload(Expense.currency),
+                selectinload(Expense.paid_by),
+                selectinload(Expense.group)
+                # _get_expense_read_details will load its own participant details
+            )
         )
-    )
-    result = await session.exec(stmt)
-    refreshed_db_expense = result.one_or_none()
+        result = await session.exec(stmt)
+        refreshed_expense_for_response = result.one_or_none()
 
-    if not refreshed_db_expense:
+        if not refreshed_expense_for_response:
+            # This indicates a serious issue if commit succeeded but fetch failed
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to re-fetch updated expense for response."
+            )
+
+        return await _get_expense_read_details(session=session, db_expense=refreshed_expense_for_response)
+
+    except HTTPException:
+        await session.rollback() # Ensure rollback if an HTTPException was raised by us or get_object_or_404
+        raise
+    except Exception as e:
+        await session.rollback()
+        # Consider logging the error e
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to re-fetch expense after update with full details",
+            detail=f"An unexpected error occurred: {str(e)}"
         )
-
-    # Manually construct and return ExpenseRead with participant_details
-    return await _get_expense_read_details(
-        session=session, db_expense=refreshed_db_expense
-    )
-
 
 @router.post(
     "/settle", response_model=schemas.SettlementResponse, status_code=status.HTTP_200_OK

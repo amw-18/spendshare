@@ -103,6 +103,12 @@ class GroupUpdate(SQLModel):
     name: Optional[str] = None
 
 
+# Participant Share Schemas
+class ParticipantShareCreate(SQLModel):
+    user_id: int
+    share_amount: float = Field(gt=0)
+
+
 # Expense Schemas
 class ExpenseBase(SQLModel):
     description: constr(min_length=1)
@@ -112,7 +118,7 @@ class ExpenseBase(SQLModel):
 
 
 class ExpenseCreate(ExpenseBase):
-    pass
+    participant_shares: Optional[List[ParticipantShareCreate]] = None
 
 
 class ExpenseRead(ExpenseBase):
