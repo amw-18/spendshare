@@ -1,6 +1,8 @@
-import React, { useState } from 'react'; // Added useState
+import React from 'react';
+import toast from 'react-hot-toast';
 
 import { useAuthStore } from '../store/authStore';
+import { useUIStore } from '../store/uiStore';
 import ComingSoonModal from '../components/ComingSoonModal'; // Import the modal
 import { BetaService as api } from '../generated/api'; // Assuming this path and service name
 
@@ -44,9 +46,7 @@ const HowItWorksStep: React.FC<{
 const LandingPageContent: React.FC = () => {
   const { token } = useAuthStore();
   const isLoggedIn = !!token;
-  // const ctaLink = isLoggedIn ? '/dashboard' : '/signup'; // Will be replaced by modal trigger
-
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const { isBetaModalOpen, openBetaModal, closeBetaModal } = useUIStore();
 
   const handleBetaInterestSubmit = async (email: string, description: string) => {
     try {
@@ -58,19 +58,19 @@ const LandingPageContent: React.FC = () => {
       // For now, using a plausible call based on typical generation patterns.
       await api.registerBetaInterestBetaInterestPost({ email, description });
 
-      setIsModalOpen(false);
-      alert('Thank you for your interest! We will be in touch.'); // Simple alert for now
+      closeBetaModal();
+      toast.success('Thank you for your interest! We will be in touch.');
     } catch (error) {
       console.error('Failed to submit beta interest:', error);
-      alert('Submission failed. Please try again.'); // Simple alert for now
+      toast.error('Submission failed. Please try again.');
     }
   };
 
   return (
     <div className="flex flex-col items-center self-stretch">
       <ComingSoonModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        isOpen={isBetaModalOpen}
+        onClose={closeBetaModal}
         onSubmit={handleBetaInterestSubmit}
       />
       {/* Hero Section */}
@@ -86,7 +86,7 @@ const LandingPageContent: React.FC = () => {
           </p>
           <div className="flex flex-col items-center gap-4 sm:flex-row">
             <button
-              onClick={() => setIsModalOpen(true)}
+              onClick={openBetaModal}
               className="flex min-w-[160px] max-w-[480px] items-center justify-center overflow-hidden rounded-full h-12 px-6 bg-[#7847ea] text-white text-base font-semibold leading-normal tracking-[0.015em] transition-colors hover:bg-[#6c3ddb] focus:ring-2 focus:ring-[#7847ea]/50"
             >
               Get Started
@@ -154,7 +154,7 @@ const LandingPageContent: React.FC = () => {
         </div>
         <div className="mt-6 md:mt-8 w-full max-w-5xl flex flex-col items-end gap-4">
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={openBetaModal}
             className="flex min-w-[160px] items-center justify-center rounded-full h-12 px-6 bg-[#7847ea] text-white text-lg font-semibold leading-normal tracking-[0.015em] transition-colors hover:bg-[#6c3ddb] focus:ring-2 focus:ring-[#7847ea]/50"
           >
             Try It
@@ -173,7 +173,7 @@ const LandingPageContent: React.FC = () => {
           </p>
         </div>
         <button
-          onClick={() => setIsModalOpen(true)}
+          onClick={openBetaModal}
           className="flex min-w-[200px] max-w-[480px] items-center justify-center overflow-hidden rounded-full h-12 px-8 bg-[#7847ea] text-white text-lg font-semibold leading-normal tracking-[0.015em] transition-colors hover:bg-[#6c3ddb] focus:ring-2 focus:ring-[#7847ea]/50"
         >
           {isLoggedIn ? 'Go to Dashboard' : 'Sign Up Now'}

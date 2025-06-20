@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import { useUIStore } from '../store/uiStore';
 import { OpenAPI } from '../generated/api';
 
 interface LayoutProps {
@@ -34,7 +35,10 @@ const SpendShareLogo = () => (
 
 const PageHeader: React.FC = () => {
   const { token, user, clearToken } = useAuthStore();
+  const { openBetaModal } = useUIStore();
   const navigate = useNavigate();
+  const location = useLocation();
+  const isLandingPage = location.pathname === '/';
 
   const handleLogout = () => {
     clearToken();
@@ -75,12 +79,21 @@ const PageHeader: React.FC = () => {
               <a href="#how-it-works" className="text-gray-300 hover:text-white text-sm font-medium leading-normal transition-colors">How it works</a>
               
             </nav>
-            <Link
-              to="/signup"
-              className="flex min-w-[100px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-10 px-5 bg-[#7847ea] hover:bg-[#6c3ddb] text-white text-sm font-semibold leading-normal tracking-[0.015em] transition-colors"
-            >
-              <span className="truncate">Get Started</span>
-            </Link>
+            {isLandingPage ? (
+              <button
+                onClick={openBetaModal}
+                className="flex min-w-[100px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-10 px-5 bg-[#7847ea] hover:bg-[#6c3ddb] text-white text-sm font-semibold leading-normal tracking-[0.015em] transition-colors"
+              >
+                <span className="truncate">Get Started</span>
+              </button>
+            ) : (
+              <Link
+                to="/signup"
+                className="flex min-w-[100px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-10 px-5 bg-[#7847ea] hover:bg-[#6c3ddb] text-white text-sm font-semibold leading-normal tracking-[0.015em] transition-colors"
+              >
+                <span className="truncate">Get Started</span>
+              </Link>
+            )}
           </>
         )}
       </div>
@@ -108,7 +121,7 @@ const PageFooter: React.FC<{ onAboutClick: () => void }> = ({ onAboutClick }) =>
         </a>
       </nav>
       
-      <p className="text-[#a393c8] text-sm font-normal leading-normal text-center"> {new Date().getFullYear()} SpendShare. All rights reserved.</p>
+      <p className="text-[#a393c8] text-sm font-normal leading-normal text-center"> {new Date().getFullYear()} SpendShare. All rights reserved. </p>
     </div>
   </footer>
 );

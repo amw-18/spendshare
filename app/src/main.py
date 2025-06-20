@@ -43,7 +43,7 @@ app.include_router(transactions.router, prefix="/api/v1") # Added transactions r
 app.include_router(currencies.router, prefix="/api/v1/currencies") # Added currencies router
 app.include_router(balances.router) # Added balances router
 app.include_router(conversion_rates.router) # Added conversion_rates router
-app.include_router(beta.router) # Added beta router
+app.include_router(beta.router, prefix="/api/v1") # Added beta router
 
 
 @app.get("/")
