@@ -1,0 +1,6 @@
+{
+  "name": "spendshare",
+  "main": "src/index.js",
+  "compatibility_date": "2025-06-20",
+  "workers_dev": true
+}
