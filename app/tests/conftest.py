@@ -25,6 +25,19 @@ from src.models.models import (  # Restore global imports for fixture type hints
     ConversionRate,
 )
 
+# Imports needed for the new fixtures from test_users.py
+from fastapi import status, HTTPException # For status codes and exceptions
+from src.models import schemas # For UserRegister, MessageResponse etc.
+# from src.core import email # Not directly calling email functions, but mocking them
+from src.core.security import get_password_hash # Already here, but good to note
+
+from datetime import datetime, timedelta, timezone # For time manipulation
+import secrets # For unique naming
+from unittest.mock import patch, AsyncMock # For mocking email sending
+from typing import Dict, Any # For type hinting fixture data (Dict, Any)
+# End imports for new fixtures
+
+
 # TEST_DATABASE_PATH = "./test_app_temp.db" # Using in-memory database for tests
 # Use a separate SQLite database for testing
 TEST_DATABASE_URL = "sqlite+aiosqlite:///file:testdb?mode=memory&cache=shared&uri=true"  # Using shared in-memory SQLite for tests
@@ -86,9 +99,16 @@ async def async_db_session() -> AsyncGenerator[AsyncSession, None]:
 @pytest_asyncio.fixture
 async def normal_user() -> AsyncGenerator[User, None]:
     user = User(
-        username="testuser",
-        email="testuser_normal@example.com",
+        username="testuser_normal_fixture",
+        email="testuser_normal_fixture@example.com",
         hashed_password=get_password_hash("password123"),
+        full_name="Test Normal User Fixture",
+        email_verified=True,
+        email_verification_token=None, # Explicitly None
+        email_verification_token_expires_at=None, # Explicitly None
+        new_email_pending_verification=None, # Explicitly None
+        email_change_token=None, # Explicitly None
+        email_change_token_expires_at=None # Explicitly None
     )
     async with TestingSessionLocal() as session:
         session.add(user)
@@ -223,6 +243,13 @@ async def new_user_with_token_factory(
             username=username,
             email=email,
             hashed_password=get_password_hash(password),
+            full_name=f"{username} FullName", # Ensure all required fields are present
+            email_verified=True, # Assume factory creates verified users for simplicity
+            email_verification_token=None,
+            email_verification_token_expires_at=None,
+            new_email_pending_verification=None,
+            email_change_token=None,
+            email_change_token_expires_at=None,
         )
         async_db_session.add(user_create)
         await async_db_session.commit()
@@ -239,3 +266,100 @@ async def new_user_with_token_factory(
         return {"user": user_create, "headers": headers, "password": password}
 
     return _factory
+
+# --- Helper functions moved from test_users.py ---
+async def get_user_by_email_from_db(db: AsyncSession, email: str) -> User | None:
+    result = await db.execute(select(User).where(User.email == email))
+    return result.scalar_one_or_none()
+
+async def get_user_by_username_from_db(db: AsyncSession, username: str) -> User | None:
+    result = await db.execute(select(User).where(User.username == username))
+    return result.scalar_one_or_none()
+
+async def get_user_by_id_from_db(db: AsyncSession, user_id: int) -> User | None:
+    result = await db.execute(select(User).where(User.id == user_id))
+    return result.scalar_one_or_none()
+
+# --- Fixtures moved from test_users.py ---
+
+# Note: Changed get_test_db to async_db_session (which is already defined in this conftest.py)
+@pytest_asyncio.fixture(scope="function")
+@patch('app.src.core.email.send_verification_email', new_callable=AsyncMock)
+async def verified_user_data_and_headers(mock_send_reg_email: AsyncMock, client: AsyncClient, async_db_session: AsyncSession) -> AsyncGenerator[Dict[str, Any], None]:
+    unique_suffix = secrets.token_hex(4)
+    raw_password = "password123"
+    user_data = {
+        "username": f"verified_{unique_suffix}",
+        "email": f"verified_{unique_suffix}@example.com",
+        "password": raw_password,
+        "full_name": f"Verified {unique_suffix.capitalize()}"
+    }
+
+    # Register user
+    register_response = await client.post("/api/v1/users/register", json=user_data)
+    assert register_response.status_code == status.HTTP_202_ACCEPTED, f"Registration failed: {register_response.text}"
+    mock_send_reg_email.assert_called_once() # From the registration step
+
+    # Retrieve token from DB
+    user_in_db = await get_user_by_email_from_db(async_db_session, user_data["email"])
+    assert user_in_db is not None, "User not found in DB after registration"
+    assert user_in_db.email_verification_token is not None, "Email verification token not set"
+    verification_token = user_in_db.email_verification_token
+
+    # Verify email
+    verify_response = await client.get(f"/api/v1/users/verify-email?token={verification_token}")
+    assert verify_response.status_code == status.HTTP_200_OK, f"Email verification failed: {verify_response.text}"
+
+    # Login
+    login_payload = {"username": user_data["username"], "password": user_data["password"]}
+    login_response = await client.post("/api/v1/users/token", data=login_payload)
+    assert login_response.status_code == status.HTTP_200_OK, f"Login failed: {login_response.text}"
+    token_data = login_response.json()
+    headers = {"Authorization": f"Bearer {token_data['access_token']}"}
+
+    # Fetch the full user model instance again to ensure it's updated
+    final_user_in_db = await get_user_by_email_from_db(async_db_session, user_data["email"])
+    assert final_user_in_db is not None, "User not found in DB after verification"
+    assert final_user_in_db.email_verified is True, "Email not marked as verified"
+
+    yield {
+        "user": final_user_in_db,
+        "headers": headers,
+        "raw_password": raw_password,
+        "email": user_data["email"],
+        "username": user_data["username"],
+        "full_name": user_data["full_name"],
+        "id": final_user_in_db.id
+    }
+
+
+@pytest_asyncio.fixture(scope="function")
+@patch('app.src.core.email.send_verification_email', new_callable=AsyncMock)
+async def pending_user_and_token(mock_send_email: AsyncMock, client: AsyncClient, async_db_session: AsyncSession) -> AsyncGenerator[Dict[str, Any], None]:
+    unique_suffix = secrets.token_hex(4)
+    raw_password = "password123"
+    user_data = {
+        "username": f"pending_{unique_suffix}",
+        "email": f"pending_{unique_suffix}@example.com",
+        "password": raw_password,
+        "full_name": f"Pending {unique_suffix.capitalize()}"
+    }
+
+    register_response = await client.post("/api/v1/users/register", json=user_data)
+    assert register_response.status_code == status.HTTP_202_ACCEPTED, f"Pending user registration failed: {register_response.text}"
+    mock_send_email.assert_called_once()
+
+    user_in_db = await get_user_by_email_from_db(async_db_session, user_data["email"])
+    assert user_in_db is not None, "Pending user not found in DB"
+    assert user_in_db.email_verification_token is not None, "Pending user verification token not set"
+    assert user_in_db.email_verified is False, "Pending user should not be verified"
+
+    yield {
+        "email": user_data["email"],
+        "username": user_data["username"],
+        "password": raw_password,
+        "token": user_in_db.email_verification_token,
+        "full_name": user_data["full_name"],
+        "id": user_in_db.id,
+        "user_model": user_in_db # include the model for direct db manipulations if needed
+    }

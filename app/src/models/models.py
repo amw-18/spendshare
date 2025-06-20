@@ -1,6 +1,17 @@
 from typing import List, Optional
 from sqlmodel import Field, Relationship, SQLModel
 from datetime import datetime, timezone
+from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import (
+    Column,
+    ForeignKey,
+    Integer,
+    UniqueConstraint,
+    String,
+    Boolean,
+    DateTime,
+    text,
+)
 from sqlalchemy import (
     Column,
     ForeignKey,
@@ -59,6 +70,17 @@ class User(SQLModel, table=True):
     username: str = Field(index=True, unique=True)
     email: str = Field(unique=True, index=True)
     hashed_password: str
+    full_name: Optional[str] = Field(default=None, max_length=100) # Added from UserRead requirement
+
+    # Email Verification Fields
+    email_verified: bool = mapped_column(Boolean, default=False, nullable=False)
+    email_verification_token: Optional[str] = mapped_column(String, index=True, nullable=True, default=None)
+    email_verification_token_expires_at: Optional[datetime] = mapped_column(DateTime(timezone=True), nullable=True, default=None, server_default=text('NULL'))
+
+    # Email Change Fields
+    new_email_pending_verification: Optional[str] = mapped_column(String, nullable=True, default=None)
+    email_change_token: Optional[str] = mapped_column(String, index=True, nullable=True, default=None)
+    email_change_token_expires_at: Optional[datetime] = mapped_column(DateTime(timezone=True), nullable=True, default=None, server_default=text('NULL'))
 
     groups: List["Group"] = Relationship(
         back_populates="members",
@@ -88,6 +110,12 @@ class User(SQLModel, table=True):
         back_populates="user",
         sa_relationship_kwargs={"cascade": "all, delete-orphan", "overlaps": "expenses_participated_in"}
     )
+
+    model_config = {
+        "arbitrary_types_allowed": True
+    }
+    # Ensure full_name is also added to User model if it's in UserRead
+    # full_name: Optional[str] = Field(default=None) # Already added above based on UserRegister/UserRead
 
 
 class Group(SQLModel, table=True):
