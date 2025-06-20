@@ -10,7 +10,7 @@ import {
   // ExpenseParticipantReadWithUser, // This is not directly exported, but part of ExpenseRead
 } from '../../generated/api';
 import { useAuthStore } from '../../store/authStore';
-import { ArrowLeftIcon, PencilSquareIcon, TrashIcon, CalendarDaysIcon, UserCircleIcon, UserGroupIcon, CurrencyDollarIcon, UsersIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, PencilSquareIcon, TrashIcon, CalendarDaysIcon, UserCircleIcon, UserGroupIcon, UsersIcon } from '@heroicons/react/24/outline';
 
 const ExpenseDetailPage: React.FC = () => {
   const { expenseId } = useParams<{ expenseId: string }>();
@@ -57,7 +57,7 @@ const ExpenseDetailPage: React.FC = () => {
         // Resolve payer information using paid_by_user_id
         if (expenseData.paid_by_user_id) {
           try {
-            const payerData = await UsersService.readUserEndpointApiV1UsersUserIdGet(expenseData.paid_by_user_id);
+                        const payerData = await UsersService.readUserEndpointApiV1ApiV1UsersUserIdGet(expenseData.paid_by_user_id);
             setPayer(payerData);
           } catch (payerErr) {
             console.error("Failed to fetch payer details:", payerErr);

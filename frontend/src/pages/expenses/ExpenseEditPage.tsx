@@ -169,7 +169,7 @@ const ExpenseEditPage: React.FC = () => {
       setIsSearchingUsers(true);
       setSearchError(null);
       try {
-        const results = await UsersService.searchUsersEndpointApiV1UsersSearchGet(participantSearchTerm);
+                const results = await UsersService.searchUsersEndpointApiV1ApiV1UsersSearchGet(participantSearchTerm);
         setSearchedUsers(results);
       } catch (err: any) {
         console.error("Failed to search users:", err);

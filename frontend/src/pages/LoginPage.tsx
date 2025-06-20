@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'; // Added useEffect
 import { useNavigate, useLocation } from 'react-router-dom'; // Added useLocation
 import { UsersService, OpenAPI } from '../generated/api';
-import { type Body_login_for_access_token_api_v1_users_token_post, type Token, type UserRead } from '../generated/api'; // Assuming Token and UserRead are relevant
+import { type Body_login_for_access_token_api_v1_api_v1_users_token_post, type Token, type UserRead } from '../generated/api'; // Assuming Token and UserRead are relevant
 import { useAuthStore } from '../store/authStore';
 import { Link } from 'react-router-dom';
 
@@ -29,20 +29,20 @@ const LoginPage: React.FC = () => {
 
     try {
       // Create the login request body as expected by the API
-      const requestBody: Body_login_for_access_token_api_v1_users_token_post = {
+      const requestBody: Body_login_for_access_token_api_v1_api_v1_users_token_post = {
         username,
         password,
       };
 
       // Call the login endpoint
-      const tokenResponse: Token = await UsersService.loginForAccessTokenApiV1UsersTokenPost(requestBody);
+      const tokenResponse: Token = await UsersService.loginForAccessTokenApiV1ApiV1UsersTokenPost(requestBody);
       const token = tokenResponse.access_token;
 
       // Configure API client to use this token for subsequent requests
       OpenAPI.TOKEN = token;
 
       // Fetch the current user's details using the token
-      const user: UserRead = await UsersService.readCurrentUserMeEndpointApiV1UsersMeGet();
+      const user: UserRead = await UsersService.readCurrentUserMeEndpointApiV1ApiV1UsersMeGet();
 
       if (!user) {
         throw new Error('Could not retrieve user information');

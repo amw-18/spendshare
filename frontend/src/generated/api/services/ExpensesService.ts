@@ -2,7 +2,6 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { Body_create_expense_with_participants_endpoint_api_v1_expenses_service__post } from '../models/Body_create_expense_with_participants_endpoint_api_v1_expenses_service__post';
 import type { ExpenseCreate } from '../models/ExpenseCreate';
 import type { ExpenseRead } from '../models/ExpenseRead';
 import type { ExpenseUpdate } from '../models/ExpenseUpdate';
@@ -22,7 +21,7 @@ export class ExpensesService {
      * @throws ApiError
      */
     public static createExpenseWithParticipantsEndpointApiV1ExpensesServicePost(
-        requestBody: Body_create_expense_with_participants_endpoint_api_v1_expenses_service__post,
+        requestBody: ExpenseCreate,
     ): CancelablePromise<ExpenseRead> {
         return __request(OpenAPI, {
             method: 'POST',

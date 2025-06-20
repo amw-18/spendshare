@@ -16,7 +16,7 @@ import {
   type GroupRead,
   type UserRead,
   type CurrencyRead, // Added CurrencyRead
-  type Body_create_expense_with_participants_endpoint_api_v1_expenses_service__post as ExpenseWithParticipantsCreate,
+
   type ExpenseCreate,
 } from '../../generated/api';
 import { useAuthStore } from '../../store/authStore';
@@ -120,7 +120,7 @@ const ExpenseCreatePage: React.FC = () => {
       setLoadingInitialData(true);
       try {
         const groupsPromise = GroupsService.readGroupsEndpointApiV1GroupsGet();
-        const usersPromise = UsersService.readUsersEndpointApiV1UsersGet();
+                const usersPromise = UsersService.searchUsersEndpointApiV1ApiV1UsersSearchGet('');
         const currenciesPromise = CurrenciesService.listCurrenciesApiV1CurrenciesGet(undefined, 500); // Fetch currencies, skip=undefined, limit=500
 
         const [groupsResponse, usersResponse, currenciesResponse] = await Promise.all([
@@ -172,7 +172,7 @@ const ExpenseCreatePage: React.FC = () => {
       // We will continue to use all users as available participants.
       // Re-fetch all users in case the list needs to be refreshed for some reason,
       // though typically this wouldn't change often.
-      UsersService.readUsersEndpointApiV1UsersGet()
+      UsersService.searchUsersEndpointApiV1ApiV1UsersSearchGet('')
         .then((allUsers: UserRead[]) => {
           setAvailableParticipants(allUsers);
           // If current user exists, pre-select all *other* users by default when group changes.
@@ -193,7 +193,7 @@ const ExpenseCreatePage: React.FC = () => {
     } else {
       // If no group is selected, ensure available participants are all users.
       setLoadingInitialData(true);
-      UsersService.readUsersEndpointApiV1UsersGet()
+      UsersService.searchUsersEndpointApiV1ApiV1UsersSearchGet('')
         .then(setAvailableParticipants)
         .catch((err: any) => {
           console.error("Failed to fetch users:", err);
@@ -247,8 +247,8 @@ const ExpenseCreatePage: React.FC = () => {
       group_id: selectedGroupId,
     };
 
-    const expenseDataWithParticipants: ExpenseWithParticipantsCreate = {
-      expense_in: expenseData, // Corrected key
+        const expenseDataWithParticipants = {
+      ...expenseData,
       participant_user_ids: participantUserIds,
     };
 
@@ -256,7 +256,7 @@ const ExpenseCreatePage: React.FC = () => {
 
     try {
       setError(null);
-      await ExpensesService.createExpenseWithParticipantsEndpointApiV1ExpensesServicePost(expenseDataWithParticipants);
+      await ExpensesService.createExpenseWithParticipantsEndpointApiV1ExpensesServicePost(expenseDataWithParticipants as any);
       // Redirect after successful creation
       if (selectedGroupId) {
         navigate(`/groups/${selectedGroupId}`); // To group detail page

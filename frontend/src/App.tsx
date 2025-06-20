@@ -1,5 +1,6 @@
 import { Routes, Route } from 'react-router-dom';
 import { useEffect } from 'react';
+import { Toaster } from 'react-hot-toast';
 import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
@@ -18,6 +19,8 @@ import LandingPageContent from './pages/LandingPageContent';
 import './App.css';
 import { useAuthStore } from './store/authStore';
 import { OpenAPI } from './generated/api';
+
+OpenAPI.BASE = '/api/v1';
 
 function App() {
   // Subscribe to token and _hasHydrated state from the store
@@ -40,6 +43,16 @@ function App() {
 
   return (
     <Layout>
+      <Toaster
+        position="bottom-center"
+        toastOptions={{
+          style: {
+            background: '#1c162c',
+            color: '#fff',
+            border: '1px solid #2f2447',
+          },
+        }}
+      />
       <Routes>
         <Route path="/" element={<LandingPageContent />} />
         <Route path="/login" element={<LoginPage />} />

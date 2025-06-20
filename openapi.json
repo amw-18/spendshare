@@ -5,6 +5,12 @@
     "description": "API for managing expenses, users, and groups in SpendShare. Includes email verification workflow.",
     "version": "0.1.1"
   },
+  "tags": [
+    {
+      "name": "Beta",
+      "description": "Endpoints for beta features."
+    }
+  ],
   "paths": {
     "/api/v1/users/register": {
       "post": {
@@ -1892,6 +1898,47 @@
           }
         }
       }
+    },
+    "/beta/interest": {
+      "post": {
+        "tags": [
+          "Beta"
+        ],
+        "summary": "Register Interest",
+        "operationId": "register_interest_beta_interest_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BetaInterestCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BetaInterestResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2001,6 +2048,44 @@
           "participant_user_ids"
         ],
         "title": "Body_create_expense_with_participants_endpoint_api_v1_expenses_service__post"
+      },
+      "BetaInterestCreate": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "title": "BetaInterestCreate"
+      },
+      "BetaInterestResponse": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "BetaInterestResponse"
       },
       "Body_login_for_access_token_api_v1_users_token_post": {
         "properties": {

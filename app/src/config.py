@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import EmailStr
 from typing import List, Union
 
 class Settings(BaseSettings):
@@ -17,6 +18,9 @@ class Settings(BaseSettings):
     API_TITLE: str = "SpendShare API"
     API_DESCRIPTION: str = "API for managing expenses, users, and groups."
     API_VERSION: str = "0.1.0"
+
+    # Support Email
+    SUPPORT_EMAIL: EmailStr = "amw@spendshare.app"
 
     # JWT Settings (common for APIs, add if you use JWT)
     SECRET_KEY: str = "your_super_secret_key_here_please_change_in_production"

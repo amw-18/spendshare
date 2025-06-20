@@ -3,9 +3,8 @@
 /* tslint:disable */
 /* eslint-disable */
 
-export type UserCreate = {
-    username: string;
-    email: string;
-    password: string;
+export type ParticipantShareCreate = {
+    user_id: number;
+    share_amount: number;
 };
 

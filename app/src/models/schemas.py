@@ -358,3 +358,13 @@ class SettlementResponse(SQLModel):
     status: str
     message: Optional[str] = None
     updated_expense_participations: List[SettlementResultItem]
+
+
+# Beta Interest Schemas
+class BetaInterestCreate(BaseModel):
+    email: EmailStr
+    description: Optional[str] = None
+
+
+class BetaInterestResponse(BaseModel):
+    message: str

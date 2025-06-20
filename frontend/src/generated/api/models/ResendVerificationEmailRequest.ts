@@ -3,9 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 
-export type UserUpdate = {
-    username?: (string | null);
-    password?: (string | null);
-    full_name?: (string | null);
+export type ResendVerificationEmailRequest = {
+    email: string;
 };
 
