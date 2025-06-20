@@ -3,9 +3,10 @@
 /* tslint:disable */
 /* eslint-disable */
 
-export type UserUpdate = {
-    username?: (string | null);
-    password?: (string | null);
+export type UserRegister = {
+    email: string;
+    password: string;
+    username: string;
     full_name?: (string | null);
 };
 

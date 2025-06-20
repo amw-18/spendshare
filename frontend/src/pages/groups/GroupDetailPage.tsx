@@ -64,7 +64,7 @@ const GroupDetailPage: React.FC = () => {
         setErrorMembers(null); // Clear previous member errors
         if (fetchedGroup.created_by_user_id) {
           try {
-            const creatorUser = await UsersService.readUserEndpointApiV1UsersUserIdGet(fetchedGroup.created_by_user_id);
+                        const creatorUser = await UsersService.readUserEndpointApiV1ApiV1UsersUserIdGet(fetchedGroup.created_by_user_id);
             setMembers([creatorUser]);
             console.warn("Displaying only group creator as member. Full member list fetching requires a dedicated endpoint or API modification.");
           } catch (userFetchErr) {
@@ -109,7 +109,7 @@ const GroupDetailPage: React.FC = () => {
       const fetchAllUsersForSearch = async () => {
         setAddMemberLoading(true);
         try {
-          const allUsers = await UsersService.searchUsersEndpointApiV1UsersSearchGet('');
+                  const allUsers = await UsersService.searchUsersEndpointApiV1ApiV1UsersSearchGet('');
           setUsersForSearch(allUsers);
         } catch (err) {
           setErrorMembers('Could not load users for search.');

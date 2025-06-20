@@ -46,7 +46,7 @@ const ExpenseListPage: React.FC = () => {
 
         if (userIdsToFetch.size > 0) {
           fetchPromises.push(
-                        UsersService.searchUsersEndpointApiV1UsersSearchGet('')
+                                                UsersService.searchUsersEndpointApiV1ApiV1UsersSearchGet('')
               .then((allUsers: UserRead[]) => {
                 const uMap: Record<number, UserRead> = {};
                 allUsers.forEach((u: UserRead) => { uMap[u.id] = u; });

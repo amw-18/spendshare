@@ -18,12 +18,12 @@ export class BetaService {
      * @returns BetaInterestResponse Successful Response
      * @throws ApiError
      */
-    public static registerBetaInterestBetaInterestPost(
+    public static registerBetaInterestApiV1BetaInterestPost(
         requestBody: BetaInterestCreate,
     ): CancelablePromise<BetaInterestResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/beta/interest',
+            url: '/api/v1/beta/interest',
             body: requestBody,
             mediaType: 'application/json',
             errors: {

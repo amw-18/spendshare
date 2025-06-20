@@ -57,7 +57,7 @@ const ExpenseDetailPage: React.FC = () => {
         // Resolve payer information using paid_by_user_id
         if (expenseData.paid_by_user_id) {
           try {
-            const payerData = await UsersService.readUserEndpointApiV1UsersUserIdGet(expenseData.paid_by_user_id);
+                        const payerData = await UsersService.readUserEndpointApiV1ApiV1UsersUserIdGet(expenseData.paid_by_user_id);
             setPayer(payerData);
           } catch (payerErr) {
             console.error("Failed to fetch payer details:", payerErr);

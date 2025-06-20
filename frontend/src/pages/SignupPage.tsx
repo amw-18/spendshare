@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { UsersService, type UserCreate } from '../generated/api';
+import { UsersService, type UserRegister } from '../generated/api';
 
 const SignupPage: React.FC = () => {
   const [username, setUsername] = useState('');
@@ -13,14 +13,14 @@ const SignupPage: React.FC = () => {
     event.preventDefault();
     setError(null);
 
-    const userData: UserCreate = {
+    const userData: UserRegister = {
       username,
       email,
       password,
     };
 
     try {
-      await UsersService.createUserEndpointApiV1UsersPost(userData);
+      await UsersService.registerUserApiV1ApiV1UsersRegisterPost(userData);
       navigate('/login?signupSuccess=true');
     } catch (err: any) {
       if (err.body && err.body.detail) {

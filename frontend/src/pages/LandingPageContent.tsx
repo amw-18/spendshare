@@ -1,20 +1,35 @@
-import { useEffect, useRef } from 'react';
-import { useState } from 'react';
+import { useEffect, useRef, type FC, type ReactNode } from 'react';
+import toast from 'react-hot-toast';
 
 import { useUIStore } from '../store/uiStore';
 import ComingSoonModal from '../components/ComingSoonModal';
 
+interface Particle {
+  x: number;
+  y: number;
+  size: number;
+  symbol: string;
+  speedX: number;
+  speedY: number;
+  opacity: number;
+  rotation: number;
+  rotationSpeed: number;
+}
 
 // Animated Background Component
-const AnimatedBackground = () => {
-  const canvasRef = useRef(null);
+const AnimatedBackground: FC = () => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
+    if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    let animationFrameId;
+    if (!ctx) return;
+
+    let animationFrameId: number;
 
     const resizeCanvas = () => {
+      if (!canvas) return;
       canvas.width = canvas.offsetWidth;
       canvas.height = canvas.offsetHeight;
     };
@@ -24,7 +39,7 @@ const AnimatedBackground = () => {
 
     // Floating crypto symbols
     const symbols = ['₿', 'Ξ', '₳', '◊', '⟐', '₮'];
-    const particles = [];
+    const particles: Particle[] = [];
 
     for (let i = 0; i < 30; i++) {
       particles.push({
@@ -41,6 +56,7 @@ const AnimatedBackground = () => {
     }
 
     const animate = () => {
+      if (!canvas || !ctx) return;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       particles.forEach(particle => {
@@ -71,7 +87,9 @@ const AnimatedBackground = () => {
 
     return () => {
       window.removeEventListener('resize', resizeCanvas);
-      cancelAnimationFrame(animationFrameId);
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
     };
   }, []);
 
@@ -155,7 +173,13 @@ const WalletIcon = () => (
   </svg>
 );
 
-const FeatureCard = ({ icon, title, description }) => (
+interface FeatureCardProps {
+  icon: ReactNode;
+  title: string;
+  description: string;
+}
+
+const FeatureCard: FC<FeatureCardProps> = ({ icon, title, description }) => (
   <div className="flex flex-col items-start gap-4 self-stretch rounded-xl border border-solid border-[#2f2447] bg-[#1c162c]/80 backdrop-blur-sm p-6 md:p-8 hover:bg-[#1c162c]/90 transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-[#7847ea]/20 group">
     <div className="flex items-center justify-center rounded-lg border border-solid border-[#7847ea]/20 bg-[#7847ea]/10 p-3 group-hover:bg-[#7847ea]/20 transition-colors duration-300">
       {icon}
@@ -165,7 +189,13 @@ const FeatureCard = ({ icon, title, description }) => (
   </div>
 );
 
-const HowItWorksStep = ({ stepNumber, title, description }) => (
+interface HowItWorksStepProps {
+  stepNumber: string;
+  title: string;
+  description: string;
+}
+
+const HowItWorksStep: FC<HowItWorksStepProps> = ({ stepNumber, title, description }) => (
   <div className="flex flex-col items-start gap-4 self-stretch group hover:scale-105 transition-transform duration-300">
     <div className="flex items-center justify-center rounded-lg border border-solid border-[#7847ea]/20 bg-[#7847ea]/10 px-3 py-1.5 group-hover:bg-[#7847ea]/20 transition-colors duration-300">
       <p className="text-sm font-medium leading-normal text-[#7847ea]">{stepNumber}</p>
@@ -175,7 +205,13 @@ const HowItWorksStep = ({ stepNumber, title, description }) => (
   </div>
 );
 
-const StatsCounter = ({ value, label, suffix = "" }) => (
+interface StatsCounterProps {
+  value: string;
+  label: string;
+  suffix?: string;
+}
+
+const StatsCounter: FC<StatsCounterProps> = ({ value, label, suffix = "" }) => (
   <div className="text-center">
     <div className="text-3xl md:text-4xl font-bold text-white mb-2">{value}{suffix}</div>
     <div className="text-[#a393c8] text-sm md:text-base">{label}</div>
@@ -185,34 +221,21 @@ const StatsCounter = ({ value, label, suffix = "" }) => (
 const LandingPageContent = () => {
   const { isBetaModalOpen, openBetaModal, closeBetaModal } = useUIStore();
 
-  const handleBetaInterestSubmit = async (email, description) => {
+  const handleBetaInterestSubmit = async (_email: string, _description: string) => {
+    // In a real app, you'd send this to your backend
     try {
-      closeBetaModal();
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 1000));
       toast.success('Thank you for your interest! We will be in touch.');
+      closeBetaModal();
     } catch (error) {
-      console.error('Failed to submit beta interest:', error);
       toast.error('Submission failed. Please try again.');
     }
   };
 
   return (
     <div className="flex flex-col items-center self-stretch overflow-hidden">
-      <style jsx>{`
-        @keyframes float {
-          0%, 100% { transform: translateY(0px); }
-          50% { transform: translateY(-20px); }
-        }
-        @keyframes float-delayed {
-          0%, 100% { transform: translateY(0px); }
-          50% { transform: translateY(-15px); }
-        }
-        .animate-float {
-          animation: float 6s ease-in-out infinite;
-        }
-        .animate-float-delayed {
-          animation: float-delayed 8s ease-in-out infinite;
-        }
-      `}</style>
+
 
       <ComingSoonModal
         isOpen={isBetaModalOpen}
