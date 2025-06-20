@@ -491,3 +491,443 @@ async def test_update_expense_invalid_currency_id(
     assert (
         response.status_code == status.HTTP_404_NOT_FOUND
     )  # Currency check is get_object_or_404
+
+
+# II. Tests for Expense Creation (POST /api/v1/expenses/service/)
+@pytest.mark.asyncio
+async def test_create_expense_with_custom_shares_success(
+    client: AsyncClient,
+    normal_user_token_headers: dict[str, str],
+    test_user: User, # Renamed from normal_user for clarity if needed, or use normal_user
+    test_user_2: User, # Assumes test_user_2 fixture exists or is created
+    test_currency: Currency,
+):
+    expense_amount = 100.0
+    shares = [
+        {"user_id": test_user.id, "share_amount": 60.0},
+        {"user_id": test_user_2.id, "share_amount": 40.0},
+    ]
+    expense_payload = {
+        "description": "Custom Shares Test",
+        "amount": expense_amount,
+        "currency_id": test_currency.id,
+        "participant_shares": shares,
+    }
+    response = await client.post(
+        "/api/v1/expenses/service/", json=expense_payload, headers=normal_user_token_headers
+    )
+    assert response.status_code == status.HTTP_201_CREATED
+    data = response.json()
+    assert data["amount"] == expense_amount
+    assert data["description"] == "Custom Shares Test"
+    assert data["currency"]["id"] == test_currency.id
+
+    participant_details = data["participant_details"]
+    assert len(participant_details) == 2
+
+    details_user1 = next((p for p in participant_details if p["user"]["id"] == test_user.id), None)
+    details_user2 = next((p for p in participant_details if p["user"]["id"] == test_user_2.id), None)
+
+    assert details_user1 is not None
+    assert details_user1["share_amount"] == 60.0
+    assert details_user2 is not None
+    assert details_user2["share_amount"] == 40.0
+
+@pytest.mark.asyncio
+async def test_create_expense_custom_shares_sum_mismatch(
+    client: AsyncClient,
+    normal_user_token_headers: dict[str, str],
+    test_user: User,
+    test_user_2: User,
+    test_currency: Currency,
+):
+    expense_payload = {
+        "description": "Sum Mismatch",
+        "amount": 100.0,
+        "currency_id": test_currency.id,
+        "participant_shares": [
+            {"user_id": test_user.id, "share_amount": 50.0},
+            {"user_id": test_user_2.id, "share_amount": 40.0}, # Sums to 90.0
+        ],
+    }
+    response = await client.post(
+        "/api/v1/expenses/service/", json=expense_payload, headers=normal_user_token_headers
+    )
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert "Sum of participant shares" in response.json()["detail"]
+
+@pytest.mark.asyncio
+async def test_create_expense_custom_shares_invalid_user(
+    client: AsyncClient,
+    normal_user_token_headers: dict[str, str],
+    test_user: User,
+    test_currency: Currency,
+):
+    invalid_user_id = 999999
+    expense_payload = {
+        "description": "Invalid User Share",
+        "amount": 100.0,
+        "currency_id": test_currency.id,
+        "participant_shares": [
+            {"user_id": test_user.id, "share_amount": 50.0},
+            {"user_id": invalid_user_id, "share_amount": 50.0},
+        ],
+    }
+    response = await client.post(
+        "/api/v1/expenses/service/", json=expense_payload, headers=normal_user_token_headers
+    )
+    assert response.status_code == status.HTTP_404_NOT_FOUND # get_object_or_404 raises 404
+    assert f"Participant user ID {invalid_user_id} not found" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_create_expense_custom_shares_duplicate_user(
+    client: AsyncClient,
+    normal_user_token_headers: dict[str, str],
+    test_user: User,
+    test_currency: Currency,
+):
+    expense_payload = {
+        "description": "Duplicate User Share",
+        "amount": 100.0,
+        "currency_id": test_currency.id,
+        "participant_shares": [
+            {"user_id": test_user.id, "share_amount": 50.0},
+            {"user_id": test_user.id, "share_amount": 50.0},
+        ],
+    }
+    response = await client.post(
+        "/api/v1/expenses/service/", json=expense_payload, headers=normal_user_token_headers
+    )
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert f"Duplicate user ID {test_user.id}" in response.json()["detail"]
+
+@pytest.mark.asyncio
+async def test_create_expense_no_custom_shares_payer_is_sole_participant(
+    client: AsyncClient,
+    normal_user_token_headers: dict[str, str],
+    test_user: User, # Payer
+    test_currency: Currency,
+):
+    expense_amount = 75.0
+    expense_payload = {
+        "description": "Payer Only Expense",
+        "amount": expense_amount,
+        "currency_id": test_currency.id,
+        "participant_shares": None, # Explicitly None
+    }
+    response = await client.post(
+        "/api/v1/expenses/service/", json=expense_payload, headers=normal_user_token_headers
+    )
+    assert response.status_code == status.HTTP_201_CREATED
+    data = response.json()
+    assert data["amount"] == expense_amount
+    participant_details = data["participant_details"]
+    assert len(participant_details) == 1
+    assert participant_details[0]["user"]["id"] == test_user.id # normal_user is the current_user
+    assert participant_details[0]["share_amount"] == expense_amount
+
+@pytest.mark.asyncio
+async def test_create_expense_empty_custom_shares_list_payer_is_sole_participant(
+    client: AsyncClient,
+    normal_user_token_headers: dict[str, str],
+    test_user: User, # Payer
+    test_currency: Currency,
+):
+    expense_amount = 88.0
+    expense_payload = {
+        "description": "Empty Shares List Expense",
+        "amount": expense_amount,
+        "currency_id": test_currency.id,
+        "participant_shares": [], # Empty list
+    }
+    response = await client.post(
+        "/api/v1/expenses/service/", json=expense_payload, headers=normal_user_token_headers
+    )
+    assert response.status_code == status.HTTP_201_CREATED
+    data = response.json()
+    assert data["amount"] == expense_amount
+    participant_details = data["participant_details"]
+    assert len(participant_details) == 1
+    assert participant_details[0]["user"]["id"] == test_user.id
+    assert participant_details[0]["share_amount"] == expense_amount
+
+
+# III. Tests for Expense Update (PUT /api/v1/expenses/{expense_id})
+
+# Helper to create an initial expense for update tests
+async def create_initial_expense_for_update(
+    client: AsyncClient,
+    headers: dict,
+    currency_id: int,
+    payer_id: int, # test_user.id
+    participants: list = None # [{"user_id": <id>, "share_amount": <amount>}]
+) -> Dict[str, Any]:
+    if participants is None:
+        # Default to payer being sole participant if not specified
+        participants = [{"user_id": payer_id, "share_amount": 50.0}]
+
+    initial_amount = sum(p["share_amount"] for p in participants)
+
+    expense_create_payload = {
+        "description": "Initial Expense for Update",
+        "amount": initial_amount,
+        "currency_id": currency_id,
+        "participant_shares": participants,
+    }
+    response = await client.post(
+        "/api/v1/expenses/service/", json=expense_create_payload, headers=headers
+    )
+    assert response.status_code == status.HTTP_201_CREATED, f"Failed to create initial expense: {response.text}"
+    return response.json()
+
+@pytest.mark.asyncio
+async def test_update_expense_change_amount_and_custom_shares_success(
+    client: AsyncClient,
+    normal_user_token_headers: dict[str, str],
+    test_user: User,
+    test_user_2: User,
+    test_currency: Currency,
+):
+    initial_expense = await create_initial_expense_for_update(
+        client, normal_user_token_headers, test_currency.id, test_user.id,
+        participants=[{"user_id": test_user.id, "share_amount": 30.0}, {"user_id": test_user_2.id, "share_amount": 20.0}] # Total 50
+    )
+    expense_id = initial_expense["id"]
+
+    updated_amount = 120.0
+    updated_shares = [
+        {"user_id": test_user.id, "share_amount": 70.0},
+        {"user_id": test_user_2.id, "share_amount": 50.0},
+    ]
+    update_payload = {
+        "description": "Updated Amount and Shares",
+        "amount": updated_amount,
+        "participants": updated_shares,
+    }
+    response = await client.put(
+        f"/api/v1/expenses/{expense_id}", json=update_payload, headers=normal_user_token_headers
+    )
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["amount"] == updated_amount
+    assert data["description"] == "Updated Amount and Shares"
+
+    participant_details = data["participant_details"]
+    assert len(participant_details) == 2
+    details_user1 = next((p for p in participant_details if p["user"]["id"] == test_user.id), None)
+    details_user2 = next((p for p in participant_details if p["user"]["id"] == test_user_2.id), None)
+    assert details_user1 is not None
+    assert details_user1["share_amount"] == 70.0
+    assert details_user2 is not None
+    assert details_user2["share_amount"] == 50.0
+
+@pytest.mark.asyncio
+async def test_update_expense_custom_shares_sum_mismatch(
+    client: AsyncClient,
+    normal_user_token_headers: dict[str, str],
+    test_user: User,
+    test_user_2: User,
+    test_currency: Currency,
+):
+    initial_expense = await create_initial_expense_for_update(
+        client, normal_user_token_headers, test_currency.id, test_user.id,
+        participants=[{"user_id": test_user.id, "share_amount": 50.0}]
+    )
+    expense_id = initial_expense["id"]
+
+    update_payload = {
+        "amount": 100.0, # This amount must match the sum of shares
+        "participants": [
+            {"user_id": test_user.id, "share_amount": 40.0},
+            {"user_id": test_user_2.id, "share_amount": 50.0}, # Sums to 90.0
+        ],
+    }
+    response = await client.put(
+        f"/api/v1/expenses/{expense_id}", json=update_payload, headers=normal_user_token_headers
+    )
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert "Sum of new shares" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_update_expense_change_amount_only_recalculate_equal_shares(
+    client: AsyncClient,
+    normal_user_token_headers: dict[str, str],
+    test_user: User,
+    test_user_2: User,
+    test_currency: Currency,
+):
+    # Initial expense with two participants
+    initial_expense = await create_initial_expense_for_update(
+        client, normal_user_token_headers, test_currency.id, test_user.id,
+        participants=[
+            {"user_id": test_user.id, "share_amount": 25.0},
+            {"user_id": test_user_2.id, "share_amount": 25.0}, # Total 50.0
+        ]
+    )
+    expense_id = initial_expense["id"]
+
+    new_total_amount = 101.0 # New amount, expecting 50.50 each
+    update_payload = {
+        "amount": new_total_amount,
+        # No "participants" field, so shares should be recalculated for existing participants
+    }
+    response = await client.put(
+        f"/api/v1/expenses/{expense_id}", json=update_payload, headers=normal_user_token_headers
+    )
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["amount"] == new_total_amount
+
+    participant_details = data["participant_details"]
+    assert len(participant_details) == 2 # Should still be 2 participants
+
+    # Check if shares are now equal and sum up to new_total_amount
+    # Allow for slight difference due to rounding, one participant might get an extra cent
+    expected_share_1 = 50.50
+    expected_share_2 = 50.50
+
+    details_user1 = next((p for p in participant_details if p["user"]["id"] == test_user.id), None)
+    details_user2 = next((p for p in participant_details if p["user"]["id"] == test_user_2.id), None)
+
+    assert details_user1 is not None
+    assert details_user2 is not None
+
+    # The sum of shares must be exactly the new total amount
+    assert round(details_user1["share_amount"] + details_user2["share_amount"], 2) == new_total_amount
+    # Each share should be very close to the expected equal share
+    assert abs(details_user1["share_amount"] - expected_share_1) <= 0.01 # Allow 1 cent diff for rounding
+    assert abs(details_user2["share_amount"] - expected_share_2) <= 0.01
+
+
+@pytest.mark.asyncio
+async def test_update_expense_set_empty_participant_list_for_nonzero_amount_fail(
+    client: AsyncClient,
+    normal_user_token_headers: dict[str, str],
+    test_user: User,
+    test_currency: Currency,
+):
+    initial_expense = await create_initial_expense_for_update(
+        client, normal_user_token_headers, test_currency.id, test_user.id,
+        participants=[{"user_id": test_user.id, "share_amount": 50.0}]
+    )
+    expense_id = initial_expense["id"]
+
+    update_payload = {
+        "amount": 50.0, # Non-zero amount
+        "participants": [], # Empty list
+    }
+    response = await client.put(
+        f"/api/v1/expenses/{expense_id}", json=update_payload, headers=normal_user_token_headers
+    )
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert "Empty participant list provided for a non-zero expense amount" in response.json()["detail"]
+
+# IV. Authorization Tests for Update
+@pytest.mark.asyncio
+async def test_update_expense_auth_payer_can_update(
+    client: AsyncClient,
+    normal_user_token_headers: dict[str, str], # Payer's headers
+    test_user: User, # Payer
+    test_currency: Currency,
+):
+    initial_expense = await create_initial_expense_for_update(
+        client, normal_user_token_headers, test_currency.id, test_user.id,
+        participants=[{"user_id": test_user.id, "share_amount": 10.0}]
+    )
+    expense_id = initial_expense["id"]
+    update_payload = {"description": "Payer Updated"}
+    response = await client.put(
+        f"/api/v1/expenses/{expense_id}", json=update_payload, headers=normal_user_token_headers
+    )
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["description"] == "Payer Updated"
+
+@pytest.mark.asyncio
+async def test_update_expense_auth_other_user_cannot_update_non_group_non_participant(
+    client: AsyncClient,
+    normal_user_token_headers: dict[str, str], # Payer's headers
+    test_user: User, # Payer
+    test_user_2_with_token: dict, # Other user's details {'user': User, 'headers': dict}
+    test_currency: Currency,
+):
+    initial_expense = await create_initial_expense_for_update(
+        client, normal_user_token_headers, test_currency.id, test_user.id,
+        participants=[{"user_id": test_user.id, "share_amount": 20.0}] # Payer is sole participant
+    )
+    expense_id = initial_expense["id"]
+
+    other_user_headers = test_user_2_with_token["headers"]
+    update_payload = {"description": "Attempted Update by Other"}
+
+    response = await client.put(
+        f"/api/v1/expenses/{expense_id}", json=update_payload, headers=other_user_headers
+    )
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+@pytest.mark.asyncio
+async def test_update_expense_auth_participant_can_update_non_group(
+    client: AsyncClient,
+    normal_user_token_headers: dict[str, str], # Payer's headers
+    test_user: User, # Payer
+    test_user_2: User, # Participant
+    test_user_2_with_token: dict, # Participant's headers
+    test_currency: Currency,
+):
+    initial_expense = await create_initial_expense_for_update(
+        client, normal_user_token_headers, test_currency.id, test_user.id,
+        participants=[
+            {"user_id": test_user.id, "share_amount": 15.0},
+            {"user_id": test_user_2.id, "share_amount": 15.0}
+        ]
+    )
+    expense_id = initial_expense["id"]
+
+    participant_headers = test_user_2_with_token["headers"]
+    update_payload = {"description": "Updated by Participant"}
+
+    response = await client.put(
+        f"/api/v1/expenses/{expense_id}", json=update_payload, headers=participant_headers
+    )
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["description"] == "Updated by Participant"
+
+@pytest.mark.asyncio
+async def test_update_expense_auth_group_member_can_update_group_expense(
+    client: AsyncClient,
+    normal_user_token_headers: dict[str, str], # Payer's headers (test_user)
+    test_user: User, # Payer, also a group creator/member
+    test_user_2: User, # Another group member
+    test_user_2_with_token: dict,
+    test_currency: Currency,
+    test_group: Group, # Assumes this group has test_user and test_user_2 as members
+):
+    # Ensure test_user (payer) and test_user_2 are members of test_group
+    # This might need explicit add via API if test_group fixture doesn't guarantee it
+    # For simplicity, assume test_group fixture or prior setup handles membership.
+    # If test_group is created by test_user, test_user is a member.
+    # Add test_user_2 to the group:
+    await client.post(f"/api/v1/groups/{test_group.id}/members/{test_user_2.id}", headers=normal_user_token_headers)
+
+
+    initial_expense_payload = {
+        "description": "Group Expense for Auth Test",
+        "amount": 100.0,
+        "currency_id": test_currency.id,
+        "group_id": test_group.id,
+        "participant_shares": [{"user_id": test_user.id, "share_amount": 100.0}] # Payer is sole participant initially
+    }
+    response_create = await client.post(
+        "/api/v1/expenses/service/", json=initial_expense_payload, headers=normal_user_token_headers
+    )
+    assert response_create.status_code == status.HTTP_201_CREATED
+    expense_id = response_create.json()["id"]
+
+    group_member_headers = test_user_2_with_token["headers"]
+    update_payload = {"description": "Updated by Group Member"}
+    response = await client.put(
+        f"/api/v1/expenses/{expense_id}", json=update_payload, headers=group_member_headers
+    )
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["description"] == "Updated by Group Member"
