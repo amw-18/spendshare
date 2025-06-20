@@ -1,6 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react'; // Added useState
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import ComingSoonModal from '../components/ComingSoonModal'; // Import the modal
+import { DefaultService as api } from '../generated/api'; // Assuming this path and service name
+
+// SVGs for icons - directly embedded for simplicity
 
 // SVGs for icons - directly embedded for simplicity
 const CheckCircleIcon = () => (
@@ -40,10 +44,35 @@ const HowItWorksStep: React.FC<{
 const LandingPageContent: React.FC = () => {
   const { token } = useAuthStore();
   const isLoggedIn = !!token;
-  const ctaLink = isLoggedIn ? '/dashboard' : '/signup';
+  // const ctaLink = isLoggedIn ? '/dashboard' : '/signup'; // Will be replaced by modal trigger
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const handleBetaInterestSubmit = async (email: string, description: string) => {
+    try {
+      // Ensure the API client is correctly imported and the method name matches.
+      // The actual method might be something like:
+      // await api.betaBetaInterestPost({ email, description });
+      // Or if DefaultService is not used directly:
+      // await betaBetaInterestPost({ requestBody: { email, description } });
+      // For now, using a plausible call based on typical generation patterns.
+      await api.registerInterestBetaInterestPost({ email, description });
+
+      setIsModalOpen(false);
+      alert('Thank you for your interest! We will be in touch.'); // Simple alert for now
+    } catch (error) {
+      console.error('Failed to submit beta interest:', error);
+      alert('Submission failed. Please try again.'); // Simple alert for now
+    }
+  };
 
   return (
     <div className="flex flex-col items-center self-stretch">
+      <ComingSoonModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSubmit={handleBetaInterestSubmit}
+      />
       {/* Hero Section */}
       <section className="relative flex flex-col items-center justify-center gap-6 self-stretch overflow-hidden px-6 py-20 md:py-28 lg:py-32">
         <div className="absolute inset-0 size-full bg-gradient-to-b from-[#161122] to-[#1c162c]/0 opacity-50"></div>
@@ -57,15 +86,18 @@ const LandingPageContent: React.FC = () => {
             SpendShare makes group expenses simple. From trips with friends to shared household bills, manage everything in one place and settle up with crypto.
           </p>
           <div className="flex flex-col items-center gap-4 sm:flex-row">
-            <Link
-              to={ctaLink}
-              className="flex min-w-[160px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-12 px-6 bg-[#7847ea] text-white text-base font-semibold leading-normal tracking-[0.015em] transition-colors hover:bg-[#6c3ddb] focus:ring-2 focus:ring-[#7847ea]/50"
+            <button
+              onClick={() => setIsModalOpen(true)}
+              disabled // Visually disabled, but onClick still works to open modal
+              className="flex min-w-[160px] max-w-[480px] items-center justify-center overflow-hidden rounded-full h-12 px-6 bg-[#7847ea] text-white text-base font-semibold leading-normal tracking-[0.015em] transition-colors hover:bg-[#6c3ddb] focus:ring-2 focus:ring-[#7847ea]/50 disabled:opacity-70 disabled:cursor-not-allowed"
+              title="Feature coming soon! Register your interest."
             >
               Get Started for Free
-            </Link>
+            </button>
+            {/* "Learn More" can remain a Link or also be changed if needed */}
             <Link
-              to="#how-it-works" // Or a link to a demo page
-              className="flex min-w-[160px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-12 px-6 bg-transparent text-[#a393c8] text-base font-semibold leading-normal tracking-[0.015em] transition-colors hover:text-white border border-solid border-[#a393c8]/50 hover:border-white focus:ring-2 focus:ring-white/50"
+              to="#how-it-works"
+              className="flex min-w-[160px] max-w-[480px] items-center justify-center overflow-hidden rounded-full h-12 px-6 bg-transparent text-[#a393c8] text-base font-semibold leading-normal tracking-[0.015em] transition-colors hover:text-white border border-solid border-[#a393c8]/50 hover:border-white focus:ring-2 focus:ring-white/50"
             >
               Learn More
             </Link>
@@ -144,12 +176,14 @@ const LandingPageContent: React.FC = () => {
             Join thousands of users who are managing their group finances the smart way. Sign up today and experience hassle-free expense sharing.
           </p>
         </div>
-        <Link
-          to={ctaLink}
-          className="flex min-w-[200px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-12 px-8 bg-[#7847ea] text-white text-lg font-semibold leading-normal tracking-[0.015em] transition-colors hover:bg-[#6c3ddb] focus:ring-2 focus:ring-[#7847ea]/50"
+        <button
+          onClick={() => setIsModalOpen(true)}
+          disabled // Visually disabled
+          className="flex min-w-[200px] max-w-[480px] items-center justify-center overflow-hidden rounded-full h-12 px-8 bg-[#7847ea] text-white text-lg font-semibold leading-normal tracking-[0.015em] transition-colors hover:bg-[#6c3ddb] focus:ring-2 focus:ring-[#7847ea]/50 disabled:opacity-70 disabled:cursor-not-allowed"
+          title="Feature coming soon! Register your interest."
         >
-          {isLoggedIn ? 'Go to Dashboard' : 'Sign Up Now'}
-        </Link>
+          {isLoggedIn ? 'Go to Dashboard (Soon)' : 'Sign Up Now (Soon)'}
+        </button>
         <div className="flex items-center gap-3 pt-4">
           <CheckCircleIcon />
           <p className="text-sm font-medium leading-normal text-[#a393c8]">Free to Use</p>

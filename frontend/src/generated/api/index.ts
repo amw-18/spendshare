@@ -7,6 +7,8 @@ export { CancelablePromise, CancelError } from './core/CancelablePromise';
 export { OpenAPI } from './core/OpenAPI';
 export type { OpenAPIConfig } from './core/OpenAPI';
 
+export type { BetaInterestCreate } from './models/BetaInterestCreate';
+export type { BetaInterestResponse } from './models/BetaInterestResponse';
 export type { Body_create_expense_with_participants_endpoint_api_v1_expenses_service__post } from './models/Body_create_expense_with_participants_endpoint_api_v1_expenses_service__post';
 export type { Body_login_for_access_token_api_v1_users_token_post } from './models/Body_login_for_access_token_api_v1_users_token_post';
 export type { ConversionRateCreate } from './models/ConversionRateCreate';
@@ -38,6 +40,7 @@ export type { UserUpdate } from './models/UserUpdate';
 export type { ValidationError } from './models/ValidationError';
 
 export { BalancesService } from './services/BalancesService';
+export { BetaService } from './services/BetaService';
 export { ConversionRatesService } from './services/ConversionRatesService';
 export { CurrenciesService } from './services/CurrenciesService';
 export { DefaultService } from './services/DefaultService';

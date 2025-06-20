@@ -225,3 +225,13 @@ class Transaction(SQLModel, table=True):
             "cascade": "save-update, merge", # Keep participations if transaction is deleted, just nullify the link
         },
     )
+
+
+class BetaInterest(SQLModel, table=True):
+    __table_args__ = {"extend_existing": True}
+    id: Optional[int] = Field(default=None, primary_key=True, index=True)
+    email: str = Field(index=True, nullable=False)
+    description: Optional[str] = Field(default=None, nullable=True)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), nullable=False
+    )

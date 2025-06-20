@@ -105,7 +105,10 @@ const PageFooter: React.FC = () => (
     <div className="max-w-5xl mx-auto flex flex-col items-center gap-8">
       <nav className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3">
         <Link className="text-[#a393c8] hover:text-white text-sm font-normal leading-normal transition-colors" to="/about">About</Link>
-        <Link className="text-[#a393c8] hover:text-white text-sm font-normal leading-normal transition-colors" to="/contact">Contact</Link>
+        {/* <Link className="text-[#a393c8] hover:text-white text-sm font-normal leading-normal transition-colors" to="/contact">Contact</Link> */}
+        <a href="mailto:amw@spendshare.app" className="text-[#a393c8] hover:text-white text-sm font-normal leading-normal transition-colors">
+          Contact Us: amw@spendshare.app
+        </a>
         <Link className="text-[#a393c8] hover:text-white text-sm font-normal leading-normal transition-colors" to="/terms">Terms of Service</Link>
         <Link className="text-[#a393c8] hover:text-white text-sm font-normal leading-normal transition-colors" to="/privacy">Privacy Policy</Link>
       </nav>
