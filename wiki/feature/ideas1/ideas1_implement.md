@@ -88,20 +88,19 @@ This phase introduces cryptocurrency-based settlement options for tech-savvy use
 These elements are relevant across multiple phases and workstreams.
 
 8.  **Notification System:**
-    *   Design and implement a general-purpose notification system for various application events.
+    *   **Status: Defined in `workstream_notification_system.md`**
+    *   **Key Backend Tasks:**
+        *   New `Notification` model (user_id, type, title, message, related_entity, is_read, etc.).
+        *   New `NotificationService` for creating, retrieving, and managing notifications (mark as read).
+        *   New API router `/notifications` for users to fetch their notifications, mark as read, get unread count.
+        *   Integrate calls to `NotificationService.create_notification` at relevant points in other services (groups, expenses, settlements, crypto settlements).
+    *   **Schema Changes:** New `models.Notification`, `schemas.NotificationRead`, `schemas.NotificationUpdate`.
 
 9.  **UX-Driven Backend Support:**
-    *   Implement backend features necessary to support the UX goals outlined in `ideas1.md`, such as:
-        *   Feature gating for crypto functionalities.
-        *   Data export capabilities.
-        *   Clear API responses for fees, exchange rates, and transaction statuses.
-
----
-*Update 1: Details for Workstream 1 (Enhanced Group Management & Invitations) added.*
-*Update 2: Details for Workstream 2 (Advanced Expense Creation & Splitting) added.*
-*Update 3: Details for Workstream 3 (Balance Calculation and Display) added.*
-*Update 4: Details for Workstream 4 (Phase 1 Settlement Enhancements (Non-Crypto)) added.*
-*Update 5: Details for Workstream 5 (Crypto Settlement - Proposal and Agreement (Backend)) added.*
-*Update 6: Details for Workstream 6 (Crypto Settlement - Execution & Wallet Integration (Backend)) added.*
-*Update 7: Details for Workstream 7 (Smart Contract Integration for Crypto Settlement) added.*
-*This document will be expanded as each subsequent workstream is detailed further.*
+    *   **Status: Defined in `workstream_ux_backend_support.md`**
+    *   **Key Backend Tasks:**
+        *   Add `crypto_features_enabled` flag to `User` model/settings. API to manage this. Services to check flag.
+        *   New API endpoints for data export (e.g., `GET /export/expenses/csv`, `GET /export/settlements/csv`).
+        *   Review and ensure API responses clearly convey fees (if any), exchange rates, and transaction statuses.
+        *   Standardize error responses and improve logging.
+    *   **Schema Changes:** `models.User` (or `UserSettings`) for feature flags.
