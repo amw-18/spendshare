@@ -931,3 +931,245 @@ async def test_update_expense_auth_group_member_can_update_group_expense(
     )
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["description"] == "Updated by Group Member"
+
+
+# V. Tests for Settlement with Custom Exchange Rates
+
+# Helper to create a transaction (similar to one in test_transactions.py but can be local if preferred)
+async def create_test_transaction(
+    client: AsyncClient,
+    headers: dict,
+    amount: float,
+    currency_id: int,
+    description: str = "Test Transaction"
+) -> Dict[str, Any]:
+    transaction_data = {
+        "amount": amount,
+        "currency_id": currency_id,
+        "description": description,
+    }
+    response = await client.post(
+        "/api/v1/transactions/", json=transaction_data, headers=headers
+    )
+    assert response.status_code == status.HTTP_201_CREATED, f"Failed to create transaction: {response.text}"
+    return response.json()
+
+@pytest.mark.asyncio
+async def test_settle_expense_participant_with_custom_exchange_rate_success(
+    client: AsyncClient,
+    normal_user_token_headers: dict[str, str], # Payer of expense (test_user from conftest)
+    test_user: User, # Payer of expense (linked to normal_user_token_headers)
+    test_user_2: User, # Participant who owes money
+    test_user_2_with_token: dict, # Participant's token details {'user': User, 'headers': dict}
+    currency_factory: Callable,
+):
+    # 1. Create currencies (e.g., USD and EUR)
+    # Ensure unique codes if tests run in parallel or DB is not perfectly clean
+    usd_currency = await currency_factory(code="CUS", name="Custom US Dollar", symbol="C$")
+    eur_currency = await currency_factory(code="CEU", name="Custom Euro", symbol="C€")
+
+    # 2. Create an expense in USD paid by test_user, with test_user_2 as a participant
+    expense_payload = {
+        "description": "Dinner in CUS",
+        "amount": 100.0, # CUS
+        "currency_id": usd_currency.id,
+        "participant_shares": [
+            {"user_id": test_user_2.id, "share_amount": 100.0} # test_user_2 owes test_user 100 CUS
+        ],
+    }
+    # test_user (normal_user_token_headers) pays
+    response_exp = await client.post(
+        "/api/v1/expenses/service/", json=expense_payload, headers=normal_user_token_headers
+    )
+    assert response_exp.status_code == status.HTTP_201_CREATED, response_exp.text
+    expense_data = response_exp.json()
+    assert len(expense_data["participant_details"]) == 1
+    expense_participant_id = expense_data["participant_details"][0]["id"]
+    assert expense_data["participant_details"][0]["user"]["id"] == test_user_2.id
+
+    # 3. test_user_2 (participant) creates a transaction in EUR to pay test_user.
+    user2_headers = test_user_2_with_token["headers"]
+    transaction_eur = await create_test_transaction(
+        client, user2_headers, amount=92.0, currency_id=eur_currency.id, description="Settlement for CUS dinner in CEU"
+    )
+
+    # 4. Settle the expense participant share using the EUR transaction and a custom rate
+    # User decides 100 CUS = 92 CEU. Rate: 1 CUS = 0.92 CEU.
+    custom_rate = 0.92
+    settled_amount_in_eur = 100.0 * custom_rate
+    # Ensure this matches the transaction amount if the entire share is settled by this transaction
+    assert abs(settled_amount_in_eur - transaction_eur["amount"]) < 1e-9, \
+        "Calculated settled amount should match transaction amount for this test case"
+
+
+    settle_payload = {
+        "transaction_id": transaction_eur["id"],
+        "settlements": [
+            {
+                "expense_participant_id": expense_participant_id,
+                "settled_amount": settled_amount_in_eur,
+                "settled_currency_id": eur_currency.id, # Must match transaction currency
+                "custom_exchange_rate": custom_rate,
+            }
+        ],
+    }
+    # The user creating the transaction (test_user_2) settles their own participation
+    response_settle = await client.post(
+        "/api/v1/expenses/settle", json=settle_payload, headers=user2_headers
+    )
+    assert response_settle.status_code == status.HTTP_200_OK, response_settle.text
+    settle_data = response_settle.json()
+
+    assert settle_data["status"] == "Completed"
+    assert len(settle_data["updated_expense_participations"]) == 1
+    settled_item = settle_data["updated_expense_participations"][0]
+    assert settled_item["expense_participant_id"] == expense_participant_id
+    assert settled_item["settled_transaction_id"] == transaction_eur["id"]
+    assert abs(settled_item["settled_amount_in_transaction_currency"] - settled_amount_in_eur) < 1e-9
+    assert settled_item["settled_currency_id"] == eur_currency.id
+
+    # 5. Verify the ExpenseParticipant record by fetching the expense again (payer can fetch)
+    response_get_exp = await client.get(f"/api/v1/expenses/{expense_data['id']}", headers=normal_user_token_headers)
+    assert response_get_exp.status_code == status.HTTP_200_OK
+    updated_expense_data = response_get_exp.json()
+
+    participant_detail = next(pd for pd in updated_expense_data["participant_details"] if pd["id"] == expense_participant_id)
+    assert participant_detail["settled_transaction_id"] == transaction_eur["id"]
+    assert abs(participant_detail["settled_amount_in_transaction_currency"] - settled_amount_in_eur) < 1e-9
+    assert participant_detail["settled_currency"]["id"] == eur_currency.id
+    assert abs(participant_detail["custom_exchange_rate"] - custom_rate) < 1e-9
+    assert participant_detail["original_expense_currency_id"] == usd_currency.id
+
+@pytest.mark.asyncio
+async def test_settle_expense_custom_rate_error_if_currencies_same(
+    client: AsyncClient,
+    normal_user_token_headers: dict[str, str], # Payer of expense (test_user)
+    test_user: User,
+    test_user_2_with_token: dict, # Participant's token
+    test_currency: Currency, # e.g. TST from conftest (used as the single currency)
+):
+    test_user_2 = test_user_2_with_token["user"] # Extract user model from fixture
+    user2_headers = test_user_2_with_token["headers"]
+
+    # 1. Create expense in TST
+    expense_payload = {
+        "description": "Dinner in TST (same currency test)",
+        "amount": 50.0,
+        "currency_id": test_currency.id,
+        "participant_shares": [{"user_id": test_user_2.id, "share_amount": 50.0}],
+    }
+    response_exp = await client.post("/api/v1/expenses/service/", json=expense_payload, headers=normal_user_token_headers)
+    assert response_exp.status_code == status.HTTP_201_CREATED, response_exp.text
+    expense_data = response_exp.json()
+    expense_participant_id = expense_data["participant_details"][0]["id"]
+
+    # 2. Create transaction in TST (same currency) by test_user_2
+    transaction_tst = await create_test_transaction(
+        client, user2_headers, amount=50.0, currency_id=test_currency.id
+    )
+
+    # 3. Attempt to settle with custom rate
+    settle_payload = {
+        "transaction_id": transaction_tst["id"],
+        "settlements": [{
+            "expense_participant_id": expense_participant_id,
+            "settled_amount": 50.0,
+            "settled_currency_id": test_currency.id,
+            "custom_exchange_rate": 1.0, # Not applicable
+        }],
+    }
+    response_settle = await client.post("/api/v1/expenses/settle", json=settle_payload, headers=user2_headers)
+    assert response_settle.status_code == status.HTTP_400_BAD_REQUEST, response_settle.text
+    assert "not applicable when expense currency and transaction currency are the same" in response_settle.json()["detail"]
+
+@pytest.mark.asyncio
+async def test_settle_expense_error_if_currencies_differ_no_custom_rate(
+    client: AsyncClient,
+    normal_user_token_headers: dict[str, str], # Payer test_user
+    test_user: User,
+    test_user_2_with_token: dict, # Participant test_user_2
+    currency_factory: Callable,
+):
+    test_user_2 = test_user_2_with_token["user"]
+    user2_headers = test_user_2_with_token["headers"]
+
+    usdx_currency = await currency_factory(code="USX", name="US Dollar Xtreme", symbol="UXX$")
+    eurx_currency = await currency_factory(code="ERX", name="Euro Xtreme", symbol="EXX€")
+
+    expense_payload = {
+        "description": "Dinner in USX (no rate test)",
+        "amount": 100.0,
+        "currency_id": usdx_currency.id,
+        "participant_shares": [{"user_id": test_user_2.id, "share_amount": 100.0}],
+    }
+    response_exp = await client.post("/api/v1/expenses/service/", json=expense_payload, headers=normal_user_token_headers)
+    assert response_exp.status_code == status.HTTP_201_CREATED, response_exp.text
+    expense_data = response_exp.json()
+    expense_participant_id = expense_data["participant_details"][0]["id"]
+
+    transaction_eurx = await create_test_transaction(
+        client, user2_headers, amount=92.0, currency_id=eurx_currency.id
+    )
+
+    settle_payload = {
+        "transaction_id": transaction_eurx["id"],
+        "settlements": [{
+            "expense_participant_id": expense_participant_id,
+            "settled_amount": 92.0,
+            "settled_currency_id": eurx_currency.id,
+            # No custom_exchange_rate provided
+        }],
+    }
+    response_settle = await client.post("/api/v1/expenses/settle", json=settle_payload, headers=user2_headers)
+    assert response_settle.status_code == status.HTTP_400_BAD_REQUEST, response_settle.text
+    assert "Custom exchange rate is required" in response_settle.json()["detail"]
+
+@pytest.mark.asyncio
+async def test_settle_expense_same_currency_no_custom_rate_success(
+    client: AsyncClient,
+    normal_user_token_headers: dict[str, str], # Payer test_user
+    test_user: User,
+    test_user_2_with_token: dict, # Participant test_user_2
+    test_currency: Currency, # TST from conftest, used as the single currency
+):
+    test_user_2 = test_user_2_with_token["user"]
+    user2_headers = test_user_2_with_token["headers"]
+
+    expense_payload = {
+        "description": "Lunch in TST (same currency, no rate)",
+        "amount": 75.0,
+        "currency_id": test_currency.id,
+        "participant_shares": [{"user_id": test_user_2.id, "share_amount": 75.0}],
+    }
+    response_exp = await client.post("/api/v1/expenses/service/", json=expense_payload, headers=normal_user_token_headers)
+    assert response_exp.status_code == status.HTTP_201_CREATED, response_exp.text
+    expense_data = response_exp.json()
+    expense_participant_id = expense_data["participant_details"][0]["id"]
+
+    transaction_tst = await create_test_transaction(
+        client, user2_headers, amount=75.0, currency_id=test_currency.id
+    )
+
+    settle_payload = {
+        "transaction_id": transaction_tst["id"],
+        "settlements": [{
+            "expense_participant_id": expense_participant_id,
+            "settled_amount": 75.0,
+            "settled_currency_id": test_currency.id,
+            # No custom_exchange_rate
+        }],
+    }
+    response_settle = await client.post("/api/v1/expenses/settle", json=settle_payload, headers=user2_headers)
+    assert response_settle.status_code == status.HTTP_200_OK, response_settle.text
+
+    # Verify fields are None in response by fetching the expense
+    response_get_exp = await client.get(f"/api/v1/expenses/{expense_data['id']}", headers=normal_user_token_headers)
+    assert response_get_exp.status_code == status.HTTP_200_OK
+    updated_expense_data = response_get_exp.json()
+    participant_detail = next(pd for pd in updated_expense_data["participant_details"] if pd["id"] == expense_participant_id)
+
+    assert participant_detail["settled_transaction_id"] == transaction_tst["id"]
+    assert abs(participant_detail["settled_amount_in_transaction_currency"] - 75.0) < 1e-9
+    assert participant_detail["settled_currency"]["id"] == test_currency.id
+    assert participant_detail["custom_exchange_rate"] is None
+    assert participant_detail["original_expense_currency_id"] is None

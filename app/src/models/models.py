@@ -11,6 +11,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     text,
+    Float,
 )
 from sqlalchemy import (
     Column,
@@ -52,6 +53,13 @@ class ExpenseParticipant(SQLModel, table=True):
         sa_column=Column(Integer, ForeignKey("transaction.id", ondelete="SET NULL")),
     )
     settled_amount_in_transaction_currency: Optional[float] = Field(default=None)
+    custom_exchange_rate: Optional[float] = Field(default=None, sa_column=Column(Float, nullable=True))
+    # Stores the currency ID of the original expense at the time of custom rate settlement
+    original_expense_currency_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, ForeignKey("currency.id", ondelete="SET NULL"), nullable=True)
+    )
+
 
     # Relationship to Transaction (optional, as not all participations are settled via a direct transaction record)
     transaction: Optional["Transaction"] = Relationship(

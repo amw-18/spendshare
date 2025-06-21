@@ -23,6 +23,8 @@ The core idea is to allow users to make a single transaction (e.g., a payment in
     *   `settled_transaction_id` (Optional): The `id` of the transaction that was used to settle this participant's share. Initially null.
     *   `settled_amount_in_transaction_currency` (Optional): The portion of the linked transaction's amount (specified in `settled_transaction_id`) that was used to cover this specific `share_amount`. This is recorded in the currency of the transaction. Initially null.
     *   `settled_currency_id` (or `settled_currency_code`) (Optional): The currency of the `settled_amount_in_transaction_currency`. This will match the currency of the linked transaction. Initially null.
+    *   `custom_exchange_rate: Optional[float]`: The user-defined exchange rate used for this settlement, if applicable.
+    *   `original_expense_currency_id: Optional[int]`: The currency of the original expense share at the time of settlement, if a custom rate was used.
 
 ## 3. Workflow Steps
 
@@ -55,6 +57,7 @@ Once a transaction exists (or is being created as part of this flow), a user can
             *   `expense_participant_id` (or `expense_id` + `user_id` to identify the share): The unique ID of the expense participant record.
             *   `settled_amount`: The amount from the transaction (in the transaction's currency) to be applied to this expense participant's share (e.g., 20.00, meaning 20 USD from the 50 USD transaction).
             *   `settled_currency_id` (or `settled_currency_code`): The currency of the `settled_amount` (e.g., "USD"). This must match the transaction's currency.
+            *   `custom_exchange_rate: Optional[float]`: User-defined rate if expense and transaction currencies differ.
 
     *   **Example Request Body:**
         ```json
@@ -118,6 +121,20 @@ Once a transaction exists (or is being created as part of this flow), a user can
     *   The `ExpenseParticipant.settled_amount_in_transaction_currency` is in the *transaction's currency*.
 *   **Currency Conversion:** The actual conversion logic (e.g., how much of "Transaction Currency X" is needed to satisfy "Expense Share Amount Y in Currency Z") is **out of scope for this initial definition**. The system will, for now, only record the amount of the transaction currency that the user *states* was used for the settlement. The user (or a future system feature) is responsible for determining this `settled_amount`.
 
+### 4.1. Custom Exchange Rate for Settlement
+
+When the currency of the expense share (`ExpenseParticipant.expense.currency_id`) differs from the currency of the transaction (`Transaction.currency_id`) used for settlement, users can specify a custom exchange rate. This rate represents the agreed-upon conversion between the two currencies for this specific settlement.
+
+*   **Purpose:** Allows users (payer and payee) to agree on an exchange rate at the moment of settlement, rather than relying on a system-defined or real-time rate, providing flexibility.
+*   **Mechanism:**
+    *   The `ExpenseParticipantSettlementInfo` schema (used in the `/expenses/settle` endpoint) accepts an optional `custom_exchange_rate: float` field.
+    *   If provided, this rate is stored on the `ExpenseParticipant` record along with the `original_expense_currency_id` (which is the currency of the expense being settled).
+    *   The `settled_amount` provided in the request is still expected to be in the **transaction's currency**. The user is responsible for calculating this `settled_amount` based on their `custom_exchange_rate` and the original share amount.
+    *   Example: If an expense share is 100 USD, and the transaction is in EUR, and the agreed rate is 1 USD = 0.90 EUR, the user would provide `custom_exchange_rate: 0.90` and `settled_amount: 90.00` (EUR).
+*   **Constraints:**
+    *   A `custom_exchange_rate` is **required** if the expense currency and transaction currency differ.
+    *   Providing a `custom_exchange_rate` is an **error** if the expense currency and transaction currency are the same.
+
 ## 5. API Impact (Summary for `openapi.json`)
 
 *   **New Schemas:**
@@ -136,5 +153,8 @@ Once a transaction exists (or is being created as part of this flow), a user can
         *   `settled_amount_in_transaction_currency: Optional[float]`
         *   `settled_currency_id: Optional[int]` (or `settled_currency_code: Optional[str]`)
         *   `settled_currency: Optional[CurrencyRead]` (if using ID)
+        *   `custom_exchange_rate: Optional[float]`
+        *   `original_expense_currency_id: Optional[int]`
 
 This workflow provides the foundation for tracking payments and linking them to specific expense shares, even when currencies differ, by explicitly recording the amount from the transaction used for settlement.
+The addition of custom exchange rates further enhances flexibility when settling debts across different currencies.

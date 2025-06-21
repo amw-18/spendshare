@@ -617,12 +617,38 @@ async def settle_expenses_endpoint(
             )
 
         # Verify settled_currency_id matches transaction.currency_id
-        # TODO: This needs to be relaxed later on
         if item.settled_currency_id != transaction.currency_id:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Settlement currency ID ({item.settled_currency_id}) does not match transaction currency ID ({transaction.currency_id}).",
+                detail=f"Settlement currency ID ({item.settled_currency_id}) does not match transaction currency ID ({transaction.currency_id}). The settled_amount should be in the transaction's currency.",
             )
+
+        # Handle custom exchange rate
+        if item.custom_exchange_rate is not None:
+            if expense_participant.expense.currency_id == transaction.currency_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Custom exchange rate for EP ID {expense_participant.id} is not applicable when expense currency ({expense_participant.expense.currency_id}) and transaction currency ({transaction.currency_id}) are the same."
+                )
+            if item.custom_exchange_rate <= 0: # Should be caught by Pydantic gt=0 as well
+                 raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Custom exchange rate must be positive."
+                )
+            expense_participant.custom_exchange_rate = item.custom_exchange_rate
+            expense_participant.original_expense_currency_id = expense_participant.expense.currency_id
+        elif expense_participant.expense.currency_id != transaction.currency_id:
+            # If currencies are different but no custom rate is provided, this is a potential issue.
+            # For now, we will require a custom rate if currencies differ.
+            # Later, this could be a point to integrate automatic rate fetching.
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Custom exchange rate is required for EP ID {expense_participant.id} when expense currency ({expense_participant.expense.currency_id}) and transaction currency ({transaction.currency_id}) differ."
+            )
+        else: # Currencies are the same, no custom rate provided (this is fine)
+            expense_participant.custom_exchange_rate = None
+            expense_participant.original_expense_currency_id = None
+
 
         # Check if already settled by another transaction
         if (

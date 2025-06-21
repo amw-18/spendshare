@@ -203,6 +203,8 @@ class ExpenseParticipantReadWithUser(ExpenseParticipantRead):
     settled_currency: Optional["CurrencyRead"] = (
         None  # Currency object of the transaction, use forward reference
     )
+    custom_exchange_rate: Optional[float] = None
+    original_expense_currency_id: Optional[int] = None
 
 
 # Schemas with Relationships (for responses)
@@ -330,6 +332,7 @@ class ExpenseParticipantSettlementInfo(SQLModel):
         gt=0
     )  # Amount settled in the currency of the transaction
     settled_currency_id: int  # Currency ID of the transaction, for validation
+    custom_exchange_rate: Optional[float] = Field(default=None, gt=0) # User-defined exchange rate
 
 
 class SettleExpensesRequest(SQLModel):
