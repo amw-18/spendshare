@@ -83,19 +83,30 @@ This workstream focuses on developing the logic and API endpoints necessary to c
 ## Schema Changes Summary (`app/src/models/schemas.py`):
 
 *   New schemas:
-    *   `schemas.DebtDetail(user_id, username, amount, currency_code)`
-    *   `schemas.CreditDetail(user_id, username, amount, currency_code)`
-    *   `schemas.UserGroupBalance(user_id, username, owes_others_total, others_owe_user_total, net_balance_in_group, debts_to_specific_users: List[DebtDetail], credits_from_specific_users: List[CreditDetail])` (amounts possibly per currency)
-    *   `schemas.GroupBalanceSummary(group_id, group_name, members_balances: List[UserGroupBalance])`
-    *   `schemas.GroupBalanceUserPerspective(group_id, group_name, your_net_balance_in_group, currency_code)`
-    *   `schemas.UserOverallBalance(user_id, total_you_owe, total_owed_to_you, net_overall_balance, breakdown_by_group: List[GroupBalanceUserPerspective], detailed_debts: List[DebtDetail], detailed_credits: List[CreditDetail])` (amounts possibly per currency or converted)
+    *   `schemas.DebtDetail(owes_user_id: int, owes_username: str, amount: float, currency_code: str)`
+        *   *Note:* `currency_code` (e.g., "USD", "EUR") is used for simplicity in display and API responses. Internally, links to `Currency` table via `currency_id` might exist on source records like `Expense`.
+    *   `schemas.CreditDetail(owed_by_user_id: int, owed_by_username: str, amount: float, currency_code: str)`
+    *   `schemas.UserGroupBalance(user_id: int, username: str, owes_others_total: float, others_owe_user_total: float, net_balance_in_group: float, debts_to_specific_users: List[DebtDetail], credits_from_specific_users: List[CreditDetail])`
+        *   *Implementation Detail:* The `float` fields for totals (`owes_others_total`, `others_owe_user_total`, `net_balance_in_group`) represent a sum of all amounts for that user in the group, irrespective of currency, for a simplified overview. The true multi-currency details are in the `debts_to_specific_users` and `credits_from_specific_users` lists, each item of which specifies a currency. This simplification for summary floats should be clearly communicated to the frontend.
+    *   `schemas.GroupBalanceSummary(group_id: int, group_name: str, members_balances: List[UserGroupBalance])`
+    *   `schemas.GroupBalanceUserPerspective(group_id: int, group_name: str, your_net_balance_in_group: float, currency_code: str)`
+        *   *Implementation Detail:* `your_net_balance_in_group` is the same potentially mixed-currency sum as in `UserGroupBalance.net_balance_in_group`. The `currency_code` here will attempt to reflect the primary currency if all components are single-currency for that user in that group; otherwise, it may indicate "MIXED" or a similar placeholder if the sum involves multiple currencies without conversion. Frontend should rely on detailed overall lists for precision.
+    *   `schemas.UserOverallBalance(user_id: int, total_you_owe: float, total_owed_to_you: float, net_overall_balance: float, breakdown_by_group: List[GroupBalanceUserPerspective], detailed_debts: List[DebtDetail], detailed_credits: List[CreditDetail])`
+        *   *Implementation Detail:* Similar to `UserGroupBalance` totals, the `float` fields (`total_you_owe`, `total_owed_to_you`, `net_overall_balance`) are sums of underlying detailed amounts, potentially mixing currencies. These provide a high-level, simplified overview. The `detailed_debts` and `detailed_credits` lists offer the precise, currency-specific breakdown.
 
 ## Key Considerations:
 
-*   **Currency Handling:** This is the most complex part. Balances must be calculated per currency. Summaries (like `net_overall_balance`) are only meaningful if converted to a single currency or presented per currency.
-    *   **Initial Approach:** Calculate and present all balances in their original expense currencies. `DebtDetail` and `CreditDetail` must include `currency_id` or `currency_code`.
-*   **Settled Expenses:** The calculation logic must correctly exclude fully settled expense shares and reduce amounts for partially settled shares. The `ExpenseParticipant.settled_transaction_id` and `settled_amount_in_transaction_currency` are key here. This also implies that the currency of the settlement transaction needs to be considered (may differ from original expense currency, requiring conversion if so).
-*   **Performance:** For users with many groups/expenses, these calculations could be intensive. Consider optimization strategies if needed (e.g., caching, pre-calculation for active groups), but not for the initial version.
+*   **Currency Handling:**
+    *   Balances are calculated respecting original expense currencies. All `DebtDetail` and `CreditDetail` items explicitly state the `currency_code`.
+    *   Summary `float` fields in `UserGroupBalance` and `UserOverallBalance` (e.g., `owes_others_total`, `net_overall_balance`) are currently implemented as direct sums of the amounts from their respective detailed lists, regardless of currency. This provides a simplified overview figure.
+    *   **Clarification:** This means these summary floats can be misleading if multiple currencies are involved without conversion (e.g., 10 USD + 5 EUR might be shown as 15.0). The frontend should be aware of this and primarily rely on the detailed, currency-specific lists (`detailed_debts`, `detailed_credits`, `debts_to_specific_users`, `credits_from_specific_users`) for accurate financial representation.
+    *   The `currency_code` in `GroupBalanceUserPerspective` attempts to provide context for `your_net_balance_in_group`. It will show the specific currency if all underlying components for that user in that group share the same currency, or a placeholder like "MIXED" or "N/A" otherwise.
+    *   Future enhancements could involve implementing currency conversion to a user's preferred currency for these summary floats, or changing their type to `Dict[str, float]` to represent per-currency totals.
+*   **Settled Expenses:**
+    *   The calculation logic correctly considers `ExpenseParticipant.settled_amount_in_transaction_currency` to reduce outstanding shares.
+    *   **Current Assumption/Limitation:** The implementation currently assumes that `settled_amount_in_transaction_currency` is directly comparable to the `share_amount` (i.e., either it's in the same currency as the original expense, or it has been pre-converted before being stored). If `ExpenseParticipant.settled_currency_id` can differ from the `Expense.currency_id` without the amount being pre-converted, the service would need enhancement to perform currency conversion for settled amounts based on exchange rates at the time of settlement. This is a potential area for future refinement if settlement transactions can introduce new currencies.
+*   **Performance:** For users with many groups/expenses, these calculations could be intensive, especially `calculate_user_overall_balances` which calls `calculate_group_balances` for each group. Initial implementation does not include caching or pre-calculation. This can be addressed if performance issues arise in practice.
+*   **API Endpoint Naming:** The endpoint `GET /users/me/balances` was implemented as `GET /api/v1/balances/me` and `GET /groups/{group_id}/balances` as `GET /api/v1/balances/groups/{group_id}` to align with the router prefix.
 
 ## Out of Scope for this Workstream:
 

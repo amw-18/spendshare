@@ -110,6 +110,66 @@ class UserUpdate(SQLModel):
 class MessageResponse(BaseModel):
     message: str
 
+
+# Balance Calculation Schemas (as per workstream_balance_calculation.md)
+class DebtDetail(SQLModel):
+    owes_user_id: int
+    owes_username: str
+    amount: float
+    currency_code: str # Assuming currency code like "USD", "EUR"
+
+
+class CreditDetail(SQLModel):
+    owed_by_user_id: int
+    owed_by_username: str
+    amount: float
+    currency_code: str # Assuming currency code like "USD", "EUR"
+
+
+class UserGroupBalance(SQLModel):
+    user_id: int
+    username: str
+    owes_others_total: float # Sum in a reference currency or dict of currencies
+    others_owe_user_total: float # Sum in a reference currency or dict of currencies
+    net_balance_in_group: float # Sum in a reference currency or dict of currencies
+    # For simplicity in phase 1, totals might be by primary currency or need careful handling if mixed.
+    # The spec mentions "calculations respecting original expense currencies"
+    # So, owes_others_total, others_owe_user_total, net_balance_in_group might need to be Dict[str, float]
+    # For now, let's assume a primary display currency or that frontend handles aggregation if multiple currencies.
+    # The spec leans towards currency-specific details in DebtDetail/CreditDetail.
+    debts_to_specific_users: List[DebtDetail] = []
+    credits_from_specific_users: List[CreditDetail] = []
+    # Let's add currency_code to UserGroupBalance for clarity on the net_balance_in_group, if it's single currency.
+    # Or this implies that net_balance_in_group is a conceptual value, and details are in lists.
+    # The spec for GroupBalanceSummary.members_balances.UserGroupBalance does not show currency_code at this level.
+    # It's likely the amounts are broken down by currency within Debt/CreditDetail.
+
+
+class GroupBalanceSummary(SQLModel):
+    group_id: int
+    group_name: str
+    members_balances: List[UserGroupBalance] = []
+
+
+class GroupBalanceUserPerspective(SQLModel):
+    group_id: int
+    group_name: str
+    your_net_balance_in_group: float
+    currency_code: str # Explicitly stating currency for this summarized balance
+
+
+class UserOverallBalance(SQLModel):
+    user_id: int
+    # These totals might need to be Dict[str, float] if not converted to a single reference currency.
+    # For now, assuming a conceptual single value, details in lists.
+    total_you_owe: float
+    total_owed_to_you: float
+    net_overall_balance: float
+    breakdown_by_group: List[GroupBalanceUserPerspective] = []
+    detailed_debts: List[DebtDetail] = [] # Aggregated across all groups
+    detailed_credits: List[CreditDetail] = [] # Aggregated across all groups
+
+
 # Resend Verification Email Request Schema
 class ResendVerificationEmailRequest(BaseModel):
     email: EmailStr

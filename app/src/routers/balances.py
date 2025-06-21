@@ -12,67 +12,72 @@ from src.models.models import (
     ExpenseParticipant,
 )
 from src.models.schemas import (
-    UserBalanceResponse,
-    CurrencyBalance,
-    CurrencyRead,
+    UserOverallBalance, # Changed from UserBalanceResponse
+    GroupBalanceSummary,
+    # CurrencyBalance, # No longer directly used here
+    # CurrencyRead, # No longer directly used here
 )
 from src.core.security import (
     get_current_user,
 )
+# Import the new service
+from src.services.balance_service import BalanceService, get_balance_service
+from src.models import schemas # Ensure schemas is available for response_model
 
 router = APIRouter(prefix="/api/v1/balances", tags=["Balances"])
 
 
-@router.get("/me", response_model=UserBalanceResponse)
-async def get_user_balances(
-    session: AsyncSession = Depends(get_session),
+@router.get("/me", response_model=schemas.UserOverallBalance) # Updated response_model
+async def get_my_overall_balances( # Renamed for clarity
     current_user: User = Depends(get_current_user),
+    balance_service: BalanceService = Depends(get_balance_service),
 ):
-    balances_by_currency: Dict[int, CurrencyBalance] = {}
-    query = (
-        select(Expense)
-        .outerjoin(ExpenseParticipant, Expense.id == ExpenseParticipant.expense_id)
-        .where(
-            or_(
-                Expense.paid_by_user_id == current_user.id,
-                ExpenseParticipant.user_id == current_user.id,
-            )
-        )
-        .options(
-            selectinload(Expense.currency),
-            selectinload(Expense.participants),
-            selectinload(Expense.paid_by),
-        )
-        .distinct()
-    )
-    expenses = await session.exec(query)
-    for expense in expenses:
-        currency_id = expense.currency_id
-        if currency_id not in balances_by_currency:
-            balances_by_currency[currency_id] = CurrencyBalance(
-                currency=CurrencyRead.model_validate(expense.currency),
-                total_paid=0.0,
-                net_owed_to_user=0.0,
-                net_user_owes=0.0,
-            )
+    """
+    Retrieves the overall balance for the currently authenticated user.
+    This includes a breakdown by group and detailed lists of debts and credits
+    aggregated across all groups.
+    """
+    if current_user.id is None:
+        # This should ideally not happen if get_current_user works correctly
+        # and user always has an ID after being fetched/authenticated.
+        raise HTTPException(status_code=400, detail="User ID not available.")
 
-        current_currency_balance = balances_by_currency[currency_id]
-        result_participant_links = list(
-            await session.exec(
-                select(
-                    ExpenseParticipant.user_id, ExpenseParticipant.share_amount
-                ).where(ExpenseParticipant.expense_id == expense.id)
-            )
+    overall_balance = await balance_service.calculate_user_overall_balances(user_id=current_user.id)
+    return overall_balance
+
+
+@router.get("/groups/{group_id}", response_model=schemas.GroupBalanceSummary)
+async def get_group_balances(
+    group_id: int,
+    current_user: User = Depends(get_current_user),
+    balance_service: BalanceService = Depends(get_balance_service),
+    # session: AsyncSession = Depends(get_session) # Can be removed if balance_service handles session
+):
+    """
+    Retrieves the balance summary for a specific group.
+    Shows who owes whom within the group.
+    Requires the current user to be a member of the group.
+    """
+    if current_user.id is None:
+        raise HTTPException(status_code=400, detail="User ID not available.")
+
+    try:
+        group_balance_summary = await balance_service.calculate_group_balances(
+            group_id=group_id, requesting_user_id=current_user.id
         )
+        return group_balance_summary
+    except ValueError as e: # Catch specific errors from service for proper HTTP responses
+        raise HTTPException(status_code=404, detail=str(e)) # e.g., Group not found
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e)) # e.g., User not member of group
+    except Exception as e:
+        # Generic error handler for unexpected issues
+        # Log this error server-side
+        raise HTTPException(status_code=500, detail="An unexpected error occurred while calculating group balances.")
 
-        if expense.paid_by_user_id == current_user.id:
-            current_currency_balance.total_paid += expense.amount
-            for participant_id, share_amount in result_participant_links:
-                if participant_id != current_user.id:  # User who is not the payer
-                    current_currency_balance.net_owed_to_user += share_amount or 0.0
-        else:
-            for participant_id, share_amount in result_participant_links:
-                if participant_id == current_user.id:  # User who is the payer
-                    current_currency_balance.net_user_owes += share_amount or 0.0
+# Need to import HTTPException
+from fastapi import HTTPException
 
-    return UserBalanceResponse(balances=list(balances_by_currency.values()))
+# The old /me endpoint logic is now encapsulated within balance_service.calculate_user_overall_balances
+# and the response model has changed from UserBalanceResponse to schemas.UserOverallBalance.
+# The previous implementation of get_user_balances is removed.
