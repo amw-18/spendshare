@@ -102,6 +102,7 @@ async def test_create_expense_with_currency_auth(
     assert len(data["participant_details"]) == 1
     assert data["participant_details"][0]["user"]["id"] == normal_user.id
     assert data["participant_details"][0]["share_amount"] == expense_data["amount"]
+    assert not data["is_settled"] # Newly created expense should not be settled
 
     assert data["currency"] is not None
     assert data["currency"]["id"] == test_currency.id
@@ -201,6 +202,7 @@ async def test_read_expense_authorization(
     assert response_payer_view.status_code == status.HTTP_200_OK
     payer_view_data = response_payer_view.json()
     assert payer_view_data["description"] == expense_description
+    assert not payer_view_data["is_settled"]
     assert payer_view_data["currency"] is not None
     assert payer_view_data["currency"]["id"] == test_currency.id
     assert payer_view_data["receipt_image_url"] is None
@@ -343,6 +345,7 @@ async def test_create_service_expense_success_auth(
     data = response.json()
     assert data["description"] == expense_description
     assert data["id"] is not None
+    assert not data["is_settled"]
     assert data["receipt_image_url"] is None
     assert data["split_method"] == "equal"
     assert sorted(data["selected_participant_user_ids"]) == sorted(selected_participants)
@@ -459,6 +462,7 @@ async def test_update_expense_success_auth(
     assert data["description"] == "Updated Desc Auth"
     assert data["amount"] == 75.0
     assert data["id"] == expense_id
+    assert not data["is_settled"] # Should remain unsettled after this type of update
 
     assert data["receipt_image_url"] is None
     # split_method and selected_participant_user_ids might depend on how update handles them
@@ -539,6 +543,7 @@ async def test_create_expense_with_custom_shares_success(
     data = response.json()
     assert data["amount"] == expense_amount
     assert data["description"] == "Custom Shares Test"
+    assert not data["is_settled"]
     assert data["currency"]["id"] == test_currency.id
     assert data["receipt_image_url"] is None
     assert data["split_method"] == "unequal"
@@ -648,6 +653,7 @@ async def test_create_expense_no_custom_shares_payer_is_sole_participant(
     assert response.status_code == status.HTTP_201_CREATED, f"Failed: {response.text}"
     data = response.json()
     assert data["amount"] == expense_amount
+    assert not data["is_settled"]
     assert data["receipt_image_url"] is None
     assert data["split_method"] == "unequal"
     assert data["selected_participant_user_ids"] is None
@@ -740,6 +746,7 @@ async def test_update_expense_change_amount_and_custom_shares_success(
     data = response.json()
     assert data["amount"] == updated_amount
     assert data["description"] == "Updated Amount and Shares"
+    assert not data["is_settled"] # Should remain unsettled
     assert data["receipt_image_url"] is None
     assert data["split_method"] == "unequal" # Original was unequal, not changed by this update type
     assert data["selected_participant_user_ids"] is None
@@ -810,6 +817,7 @@ async def test_update_expense_change_amount_only_recalculate_equal_shares(
     assert response.status_code == status.HTTP_200_OK, f"Failed: {response.text}"
     data = response.json()
     assert data["amount"] == new_total_amount
+    assert not data["is_settled"] # Should remain unsettled
     assert data["receipt_image_url"] is None
     assert data["split_method"] == "unequal" # Original method was unequal
     assert data["selected_participant_user_ids"] is None
@@ -879,6 +887,7 @@ async def test_update_expense_auth_payer_can_update(
     assert response.status_code == status.HTTP_200_OK, f"Failed: {response.text}"
     data = response.json()
     assert data["description"] == "Payer Updated"
+    assert not data["is_settled"] # Should remain unsettled
     assert data["receipt_image_url"] is None
     assert data["split_method"] == "unequal" # Original was unequal
     assert data["selected_participant_user_ids"] is None
@@ -932,6 +941,7 @@ async def test_update_expense_auth_participant_can_update_non_group(
     assert response.status_code == status.HTTP_200_OK, f"Failed: {response.text}"
     data = response.json()
     assert data["description"] == "Updated by Participant"
+    assert not data["is_settled"] # Should remain unsettled
     assert data["receipt_image_url"] is None
     assert data["split_method"] == "unequal"
     assert data["selected_participant_user_ids"] is None
@@ -975,6 +985,7 @@ async def test_update_expense_auth_group_member_can_update_group_expense(
     assert response.status_code == status.HTTP_200_OK, f"Failed: {response.text}"
     data = response.json()
     assert data["description"] == "Updated by Group Member"
+    assert not data["is_settled"] # Should remain unsettled
     assert data["receipt_image_url"] is None
     assert data["split_method"] == "unequal" # Initial creation was unequal
     assert data["selected_participant_user_ids"] is None
@@ -1001,6 +1012,7 @@ async def test_create_expense_designate_self_as_payer(
     assert response.status_code == status.HTTP_201_CREATED, f"Failed: {response.text}"
     data = response.json()
     assert data["paid_by_user"]["id"] == test_user.id
+    assert not data["is_settled"]
     assert len(data["participant_details"]) == 1
     assert data["participant_details"][0]["user"]["id"] == test_user.id
     assert data["participant_details"][0]["share_amount"] == 50.0
@@ -1026,6 +1038,7 @@ async def test_create_expense_designate_other_user_as_payer_non_group(
     assert response.status_code == status.HTTP_201_CREATED, f"Failed: {response.text}"
     data = response.json()
     assert data["paid_by_user"]["id"] == test_user_2.id
+    assert not data["is_settled"]
     assert len(data["participant_details"]) == 1
     assert data["participant_details"][0]["user"]["id"] == test_user_2.id
     assert data["participant_details"][0]["share_amount"] == 70.0
@@ -1054,6 +1067,7 @@ async def test_create_group_expense_creator_pays_other_member_participates(
     assert response.status_code == status.HTTP_201_CREATED, f"Failed: {response.text}"
     data = response.json()
     assert data["paid_by_user"]["id"] == test_user.id
+    assert not data["is_settled"]
     assert data["group_id"] == test_group_shared_with_user2.id
     assert len(data["participant_details"]) == 2
 
@@ -1081,6 +1095,7 @@ async def test_create_group_expense_other_member_pays(
     assert response.status_code == status.HTTP_201_CREATED, f"Failed: {response.text}"
     data = response.json()
     assert data["paid_by_user"]["id"] == test_user_2.id
+    assert not data["is_settled"]
     assert data["group_id"] == test_group_shared_with_user2.id
     assert len(data["participant_details"]) == 2
 
@@ -1182,6 +1197,7 @@ async def test_create_expense_equal_split_success(
     response = await client.post("/api/v1/expenses/service/", json=expense_payload, headers=normal_user_token_headers)
     assert response.status_code == status.HTTP_201_CREATED, f"Failed: {response.text}"
     data = response.json()
+    assert not data["is_settled"]
     assert data["split_method"] == "equal"
     assert sorted(data["selected_participant_user_ids"]) == sorted(participants)
     assert len(data["participant_details"]) == 2
@@ -1243,6 +1259,7 @@ async def test_create_expense_percentage_split_success(
     response = await client.post("/api/v1/expenses/service/", json=expense_payload, headers=normal_user_token_headers)
     assert response.status_code == status.HTTP_201_CREATED, f"Failed: {response.text}"
     data = response.json()
+    assert not data["is_settled"]
     assert data["split_method"] == "percentage"
     assert data["selected_participant_user_ids"] is None
 

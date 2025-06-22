@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager  # For lifespan events in newer FastA
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.db.database import create_db_and_tables
-from src.routers import users, groups, expenses, currencies, balances, conversion_rates, transactions, beta # Added beta
+from src.routers import users, groups, expenses, currencies, balances, conversion_rates, transactions, beta, settlements # Added settlements
 from src.config import settings
 
 # Lifespan context manager for startup and shutdown events
@@ -74,6 +74,7 @@ app.include_router(currencies.router, prefix="/api/v1/currencies") # Added curre
 app.include_router(balances.router) # Added balances router
 app.include_router(conversion_rates.router) # Added conversion_rates router
 app.include_router(beta.router, prefix="/api/v1") # Added beta router
+app.include_router(settlements.router, prefix="/api/v1") # Added settlements router
 
 
 @app.get("/")
