@@ -1,6 +1,6 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import EmailStr
-from typing import List, Union
+from typing import List, Union, Optional
 
 class Settings(BaseSettings):
     # Database
@@ -19,6 +19,15 @@ class Settings(BaseSettings):
     API_DESCRIPTION: str = "API for managing expenses, users, and groups."
     API_VERSION: str = "0.1.0"
 
+    # Mailgun settings
+    MAILGUN_API_KEY: Optional[str] = None
+    MAILGUN_DOMAIN_NAME: Optional[str] = None
+    MAILGUN_API_BASE_URL: str = "https://api.mailgun.net/v3"
+    MAIL_FROM_EMAIL: EmailStr = "noreply@example.com"  # Default from email
+
+    # Frontend URL (for email links)
+    FRONTEND_URL: str = "http://localhost:3000"
+
     # Support Email
     SUPPORT_EMAIL: EmailStr = "amw@spendshare.app"
 
@@ -30,3 +39,6 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding='utf-8', extra='ignore')
 
 settings = Settings()
+
+def get_settings() -> Settings:
+    return settings
