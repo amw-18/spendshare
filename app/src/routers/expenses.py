@@ -22,6 +22,7 @@ from src.models.models import (
 from src.models import schemas
 from src.core.security import get_current_user
 from src.utils import get_object_or_404
+from src.services.expense_service import update_expense_settlement_status # Added import
 
 router = APIRouter(
     prefix="/expenses",
@@ -716,6 +717,7 @@ async def settle_expenses_endpoint(
 
     results: List[schemas.SettlementResultItem] = []
     updated_participants_to_commit = []
+    affected_expense_ids = set() # To store IDs of expenses whose participants were updated
 
     # Check for duplicate expense_participant_ids in the request upfront
     seen_ep_ids_in_request = set()
@@ -795,15 +797,11 @@ async def settle_expenses_endpoint(
         expense_participant.settled_transaction_id = transaction.id
         expense_participant.settled_amount_in_transaction_currency = item.settled_amount
 
-        # TODO:
-        # Potentially mark the original Expense as fully settled if all its participations are settled.
-        # This logic is more complex and would require fetching all participants for the expense.
-        # For now, just update the ExpenseParticipant. This can also be a background task maybe?
-
         session.add(expense_participant)
         updated_participants_to_commit.append(
             expense_participant
         )  # Keep track for commit
+        affected_expense_ids.add(expense_participant.expense_id) # Track affected expense
 
         results.append(
             schemas.SettlementResultItem(
@@ -816,9 +814,15 @@ async def settle_expenses_endpoint(
         )
 
     if updated_participants_to_commit:  # Only commit if there are successful updates
-        await session.commit()
+        await session.commit() # Commit changes to ExpenseParticipant first
         for ep in updated_participants_to_commit:
             await session.refresh(ep)  # Refresh to get any DB-side updates if necessary
+
+        # After successful settlement of participants, update parent expense statuses
+        for expense_id in affected_expense_ids:
+            await update_expense_settlement_status(expense_id, session)
+
+        await session.commit() # Commit changes to Expense statuses
 
     return schemas.SettlementResponse(
         status="Completed",

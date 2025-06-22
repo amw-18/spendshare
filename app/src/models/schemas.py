@@ -439,6 +439,24 @@ class SettlementResponse(SQLModel):
     updated_expense_participations: List[SettlementResultItem]
 
 
+# Schema for the new /settlements/record-direct-payment endpoint
+class RecordDirectPaymentRequest(SQLModel):
+    debtor_user_id: int # User who owed money and presumably paid
+    creditor_user_id: int # User who was owed money and received payment (original payer of the expense part)
+    amount_paid: float = Field(gt=0)
+    currency_paid_id: int
+    expense_participant_ids_to_settle: List[int]
+
+    @field_validator("expense_participant_ids_to_settle")
+    @classmethod
+    def participant_ids_must_not_be_empty(
+        cls, v: List[int]
+    ) -> List[int]:
+        if not v:
+            raise ValueError("expense_participant_ids_to_settle list cannot be empty.")
+        return v
+
+
 # Beta Interest Schemas
 class BetaInterestCreate(BaseModel):
     email: EmailStr
