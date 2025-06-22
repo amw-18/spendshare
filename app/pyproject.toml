@@ -20,6 +20,7 @@ dependencies = [
     "python-multipart>=0.0.20",
     "sqlmodel>=0.0.14",
     "uvicorn[standard]>=0.34.2",
+    "requests>=2.31.0", # For sending emails via Mailgun
 ]
 
 [tool.pytest.ini_options]

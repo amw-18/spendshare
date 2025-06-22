@@ -4,7 +4,7 @@ import pytest_asyncio  # Added for async fixture
 from httpx import AsyncClient
 from fastapi import status
 from typing import Dict, Any, AsyncGenerator
-from src.models.models import User, Currency  # Added Currency
+from src.models.models import User, Currency, Group  # Added Currency and Group
 from src.main import app  # For TestClient, if not using AsyncClient directly for all
 # from fastapi.testclient import TestClient # No longer needed for test_currency_sync
 
