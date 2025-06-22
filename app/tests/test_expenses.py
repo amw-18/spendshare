@@ -98,18 +98,20 @@ async def test_create_expense_with_currency_auth(
     assert data["amount"] == expense_data["amount"]
     assert data["id"] is not None
     assert "participant_details" in data
-    for pd_item in data[
-        "participant_details"
-    ]:  # Assuming it's an empty list for simple expense
-        assert "id" in pd_item  # ExpenseParticipant.id
-        assert pd_item.get("settled_transaction_id") is None
-        assert pd_item.get("settled_amount_in_transaction_currency") is None
-        assert pd_item.get("settled_currency_id") is None
-        assert pd_item.get("settled_currency") is None
+    # For simple endpoint, payer becomes sole participant
+    assert len(data["participant_details"]) == 1
+    assert data["participant_details"][0]["user"]["id"] == normal_user.id
+    assert data["participant_details"][0]["share_amount"] == expense_data["amount"]
+    assert not data["is_settled"] # Newly created expense should not be settled
+
     assert data["currency"] is not None
     assert data["currency"]["id"] == test_currency.id
     assert data["currency"]["code"] == test_currency.code
     assert data["currency"]["name"] == test_currency.name
+
+    assert data["receipt_image_url"] is None
+    assert data["split_method"] == "unequal" # Default for simple endpoint
+    assert data["selected_participant_user_ids"] is None
 
 
 @pytest.mark.asyncio
@@ -166,29 +168,32 @@ async def test_read_expense_authorization(
     other_user_token = res_other.json()["access_token"]
     other_user_headers = {"Authorization": f"Bearer {other_user_token}"}
 
-    # Setup: Create an expense by normal_user with other_user as a participant
+    # Setup: Create an expense by normal_user with other_user as a participant using "equal" split
+    expense_description = "Shared Dinner Equal Split"
+    expense_amount = 120.0
+    selected_participants = [normal_user.id, other_user_id]
     expense_payload = {
-        "expense_in": {
-            "description": "Shared Dinner",
-            "amount": 120.0,
-            "currency_id": test_currency.id,
-            # paid_by_user_id is implicit from normal_user_token_headers
-        },
-        "participant_user_ids": [
-            normal_user.id,
-            other_user_id,
-        ],  # Payer (normal_user) is also a participant
+        "description": expense_description,
+        "amount": expense_amount,
+        "currency_id": test_currency.id,
+        # paid_by_user_id is implicit (normal_user)
+        "split_method": "equal",
+        "selected_participant_user_ids": selected_participants,
     }
     response_create_exp = await client.post(
         "/api/v1/expenses/service/",
         json=expense_payload,
         headers=normal_user_token_headers,
     )
-    assert (
-        response_create_exp.status_code == status.HTTP_201_CREATED
-    )  # Changed from 200 OK
+    assert response_create_exp.status_code == status.HTTP_201_CREATED, f"Failed to create expense: {response_create_exp.text}"
     created_expense = response_create_exp.json()
     expense_id = created_expense["id"]
+
+    # Expected values for the created expense
+    assert created_expense["receipt_image_url"] is None
+    assert created_expense["split_method"] == "equal"
+    assert sorted(created_expense["selected_participant_user_ids"]) == sorted(selected_participants)
+
 
     # Test: Payer (normal_user) can view
     response_payer_view = await client.get(
@@ -196,17 +201,17 @@ async def test_read_expense_authorization(
     )
     assert response_payer_view.status_code == status.HTTP_200_OK
     payer_view_data = response_payer_view.json()
-    assert (
-        payer_view_data["description"] == expense_payload["expense_in"]["description"]
-    )
+    assert payer_view_data["description"] == expense_description
+    assert not payer_view_data["is_settled"]
     assert payer_view_data["currency"] is not None
     assert payer_view_data["currency"]["id"] == test_currency.id
+    assert payer_view_data["receipt_image_url"] is None
+    assert payer_view_data["split_method"] == "equal"
+    assert sorted(payer_view_data["selected_participant_user_ids"]) == sorted(selected_participants)
+    assert len(payer_view_data["participant_details"]) == 2
     for pd_item in payer_view_data["participant_details"]:
         assert "id" in pd_item and isinstance(pd_item["id"], int)
-        assert pd_item.get("settled_transaction_id") is None
-        assert pd_item.get("settled_amount_in_transaction_currency") is None
-        assert pd_item.get("settled_currency_id") is None
-        assert pd_item.get("settled_currency") is None
+        assert pd_item.get("settled_transaction_id") is None # Keep existing checks
 
     # Test: Participant (other_user) can view
     response_participant_view = await client.get(
@@ -216,11 +221,14 @@ async def test_read_expense_authorization(
     participant_view_data = response_participant_view.json()
     assert participant_view_data["currency"] is not None
     assert participant_view_data["currency"]["id"] == test_currency.id
-    for pd_item in participant_view_data[
-        "participant_details"
-    ]:  # Check participant details in participant view
+    assert participant_view_data["receipt_image_url"] is None
+    assert participant_view_data["split_method"] == "equal"
+    assert sorted(participant_view_data["selected_participant_user_ids"]) == sorted(selected_participants)
+    assert len(participant_view_data["participant_details"]) == 2
+    for pd_item in participant_view_data["participant_details"]:
         assert "id" in pd_item and isinstance(pd_item["id"], int)
-        assert pd_item.get("settled_transaction_id") is None
+        assert pd_item.get("settled_transaction_id") is None # Keep existing checks
+
 
     # Test: Non-participant/non-payer/non-admin (third_user) cannot view (403)
     response_third_user_view = await client.get(
@@ -307,19 +315,24 @@ async def test_create_service_expense_success_auth(
         "srv_part1_auth",
         "srv_part1_auth@example.com",  # Uses helper
     )
+    participant1_data = await create_test_user(
+        client,
+        "srv_part1_auth",
+        "srv_part1_auth@example.com",
+    )
     participant1_id = participant1_data["id"]
 
+    expense_description = "Dinner via Service Auth Equal Split"
+    expense_amount = 100.0
+    selected_participants = [normal_user.id, participant1_id]
+
     service_expense_payload = {
-        "expense_in": {
-            "description": "Dinner via Service Auth",
-            "amount": 100.0,
-            "currency_id": test_currency.id,
-            # paid_by_user_id implicit from normal_user_token_headers
-        },
-        "participant_user_ids": [
-            normal_user.id,
-            participant1_id,
-        ],  # Payer is also a participant
+        "description": expense_description,
+        "amount": expense_amount,
+        "currency_id": test_currency.id,
+        "split_method": "equal",
+        "selected_participant_user_ids": selected_participants,
+        # paid_by_user_id is implicit (normal_user)
     }
     response = await client.post(
         "/api/v1/expenses/service/",
@@ -330,26 +343,24 @@ async def test_create_service_expense_success_auth(
         f"Failed to create service expense: {response.text}"
     )
     data = response.json()
-    assert data["description"] == service_expense_payload["expense_in"]["description"]
+    assert data["description"] == expense_description
     assert data["id"] is not None
-    assert len(data["participant_details"]) == len(
-        service_expense_payload["participant_user_ids"]
-    )
+    assert not data["is_settled"]
+    assert data["receipt_image_url"] is None
+    assert data["split_method"] == "equal"
+    assert sorted(data["selected_participant_user_ids"]) == sorted(selected_participants)
+
+    assert len(data["participant_details"]) == len(selected_participants)
     for pd_item in data["participant_details"]:
         assert "id" in pd_item and isinstance(pd_item["id"], int)
-        assert pd_item.get("settled_transaction_id") is None  # Check new fields
+        assert pd_item.get("settled_transaction_id") is None
         assert pd_item.get("settled_amount_in_transaction_currency") is None
         assert pd_item.get("settled_currency_id") is None
         assert pd_item.get("settled_currency") is None
-        # Check user details within participant_details
         assert "user" in pd_item
         assert "id" in pd_item["user"]
-        # Example: ensure correct users are listed if participant_user_ids is used for matching
         user_id_in_participant_detail = pd_item["user"]["id"]
-        assert (
-            user_id_in_participant_detail
-            in service_expense_payload["participant_user_ids"]
-        )
+        assert user_id_in_participant_detail in selected_participants
 
     assert data["currency"] is not None
     assert data["currency"]["id"] == test_currency.id
@@ -389,21 +400,23 @@ async def test_read_multiple_expenses_auth(
         )
         if found_expense_in_list:
             assert found_expense_in_list["currency"]["id"] == test_currency.id
-            # Since this expense was simple, participant_details might be empty or just the payer
-            # depending on how POST /expenses/ (simple) vs POST /expenses/service/ works regarding auto-participation.
-            # The key is that the fields are present, even if None.
-            for pd_item in found_expense_in_list.get("participant_details", []):
-                assert "id" in pd_item and isinstance(pd_item["id"], int)
-                assert pd_item.get("settled_transaction_id") is None
-                assert pd_item.get("settled_amount_in_transaction_currency") is None
-                assert pd_item.get("settled_currency_id") is None
-                assert pd_item.get("settled_currency") is None
+            assert found_expense_in_list["receipt_image_url"] is None
+            assert found_expense_in_list["split_method"] == "unequal" # Simple endpoint defaults to this
+            assert found_expense_in_list["selected_participant_user_ids"] is None
+
+            # For simple endpoint, payer is sole participant
+            assert len(found_expense_in_list["participant_details"]) == 1
+            pd_item = found_expense_in_list["participant_details"][0]
+            assert "id" in pd_item and isinstance(pd_item["id"], int)
+            assert pd_item.get("settled_transaction_id") is None
+            assert pd_item.get("settled_amount_in_transaction_currency") is None
+            assert pd_item.get("settled_currency_id") is None
+            assert pd_item.get("settled_currency") is None
+            assert pd_item["user"]["id"] == normal_user.id # normal_user created and paid
+            assert pd_item["share_amount"] == created_expense_data["amount"]
         else:
-            # If the created expense is not found, it implies an issue with how expenses are listed for the user
-            # or the user context of the test. For now, we'll assume it might be found.
-            # A more robust test would ensure the user creating the expense is the one listing,
-            # or that the listing logic correctly filters for this user.
-            pass
+            # This case should ideally not happen if the listing logic is correct for the user
+            pytest.fail("Created expense not found in the list for the user who created it.")
 
 
 # Updating expenses (PUT /api/v1/expenses/{expense_id}) is protected by get_current_user.
@@ -449,15 +462,24 @@ async def test_update_expense_success_auth(
     assert data["description"] == "Updated Desc Auth"
     assert data["amount"] == 75.0
     assert data["id"] == expense_id
-    assert (
-        "participant_details" in data
-    )  # Should be empty if no participants were added on creation/update
-    for pd_item in data["participant_details"]:
-        assert "id" in pd_item and isinstance(pd_item["id"], int)
-        assert pd_item.get("settled_transaction_id") is None
-        assert pd_item.get("settled_amount_in_transaction_currency") is None
-        assert pd_item.get("settled_currency_id") is None
-        assert pd_item.get("settled_currency") is None
+    assert not data["is_settled"] # Should remain unsettled after this type of update
+
+    assert data["receipt_image_url"] is None
+    # split_method and selected_participant_user_ids might depend on how update handles them
+    # Assuming update doesn't change split_method unless participants are also updated.
+    # The original expense was simple, so it was "unequal".
+    assert data["split_method"] == "unequal"
+    assert data["selected_participant_user_ids"] is None
+
+    # If only amount/desc/currency changes, participants might be recalculated or remain.
+    # The current update logic recalculates shares for existing participants if amount changes and no new participant list is given.
+    # For a simple expense, the payer was the only participant.
+    assert "participant_details" in data
+    assert len(data["participant_details"]) == 1
+    pd_item = data["participant_details"][0]
+    assert pd_item["user"]["id"] == normal_user.id # Payer
+    assert pd_item["share_amount"] == 75.0 # New amount
+
     assert data["currency"] is not None
     assert data["currency"]["id"] == new_currency_id
     assert data["currency"]["code"] == "UCU"
@@ -511,16 +533,21 @@ async def test_create_expense_with_custom_shares_success(
         "description": "Custom Shares Test",
         "amount": expense_amount,
         "currency_id": test_currency.id,
+        "split_method": "unequal", # Explicitly set for this test
         "participant_shares": shares,
     }
     response = await client.post(
         "/api/v1/expenses/service/", json=expense_payload, headers=normal_user_token_headers
     )
-    assert response.status_code == status.HTTP_201_CREATED
+    assert response.status_code == status.HTTP_201_CREATED, f"Failed: {response.text}"
     data = response.json()
     assert data["amount"] == expense_amount
     assert data["description"] == "Custom Shares Test"
+    assert not data["is_settled"]
     assert data["currency"]["id"] == test_currency.id
+    assert data["receipt_image_url"] is None
+    assert data["split_method"] == "unequal"
+    assert data["selected_participant_user_ids"] is None # Not applicable for unequal
 
     participant_details = data["participant_details"]
     assert len(participant_details) == 2
@@ -545,6 +572,7 @@ async def test_create_expense_custom_shares_sum_mismatch(
         "description": "Sum Mismatch",
         "amount": 100.0,
         "currency_id": test_currency.id,
+        "split_method": "unequal",
         "participant_shares": [
             {"user_id": test_user.id, "share_amount": 50.0},
             {"user_id": test_user_2.id, "share_amount": 40.0}, # Sums to 90.0
@@ -568,6 +596,7 @@ async def test_create_expense_custom_shares_invalid_user(
         "description": "Invalid User Share",
         "amount": 100.0,
         "currency_id": test_currency.id,
+        "split_method": "unequal",
         "participant_shares": [
             {"user_id": test_user.id, "share_amount": 50.0},
             {"user_id": invalid_user_id, "share_amount": 50.0},
@@ -591,6 +620,7 @@ async def test_create_expense_custom_shares_duplicate_user(
         "description": "Duplicate User Share",
         "amount": 100.0,
         "currency_id": test_currency.id,
+        "split_method": "unequal",
         "participant_shares": [
             {"user_id": test_user.id, "share_amount": 50.0},
             {"user_id": test_user.id, "share_amount": 50.0},
@@ -611,46 +641,49 @@ async def test_create_expense_no_custom_shares_payer_is_sole_participant(
 ):
     expense_amount = 75.0
     expense_payload = {
-        "description": "Payer Only Expense",
+        "description": "Payer Only Expense (Unequal, No Shares)",
         "amount": expense_amount,
         "currency_id": test_currency.id,
-        "participant_shares": None, # Explicitly None
+        "split_method": "unequal", # Explicit or rely on default
+        "participant_shares": None,
     }
     response = await client.post(
         "/api/v1/expenses/service/", json=expense_payload, headers=normal_user_token_headers
     )
-    assert response.status_code == status.HTTP_201_CREATED
+    assert response.status_code == status.HTTP_201_CREATED, f"Failed: {response.text}"
     data = response.json()
     assert data["amount"] == expense_amount
+    assert not data["is_settled"]
+    assert data["receipt_image_url"] is None
+    assert data["split_method"] == "unequal"
+    assert data["selected_participant_user_ids"] is None
+
     participant_details = data["participant_details"]
     assert len(participant_details) == 1
-    assert participant_details[0]["user"]["id"] == test_user.id # normal_user is the current_user
+    assert participant_details[0]["user"]["id"] == test_user.id
     assert participant_details[0]["share_amount"] == expense_amount
 
 @pytest.mark.asyncio
-async def test_create_expense_empty_custom_shares_list_payer_is_sole_participant(
+async def test_create_expense_unequal_empty_shares_list_error( # Renamed and logic changed
     client: AsyncClient,
     normal_user_token_headers: dict[str, str],
-    test_user: User, # Payer
+    test_user: User,
     test_currency: Currency,
 ):
     expense_amount = 88.0
     expense_payload = {
-        "description": "Empty Shares List Expense",
-        "amount": expense_amount,
+        "description": "Empty Shares List Error Test",
+        "amount": expense_amount, # Non-zero amount
         "currency_id": test_currency.id,
+        "split_method": "unequal",
         "participant_shares": [], # Empty list
     }
     response = await client.post(
         "/api/v1/expenses/service/", json=expense_payload, headers=normal_user_token_headers
     )
-    assert response.status_code == status.HTTP_201_CREATED
-    data = response.json()
-    assert data["amount"] == expense_amount
-    participant_details = data["participant_details"]
-    assert len(participant_details) == 1
-    assert participant_details[0]["user"]["id"] == test_user.id
-    assert participant_details[0]["share_amount"] == expense_amount
+    # Expected behavior: error because participant_shares is empty for non-zero amount with "unequal"
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert "Participant shares cannot be an empty list for 'unequal' split with non-zero amount" in response.json()["detail"]
 
 
 # III. Tests for Expense Update (PUT /api/v1/expenses/{expense_id})
@@ -673,6 +706,7 @@ async def create_initial_expense_for_update(
         "description": "Initial Expense for Update",
         "amount": initial_amount,
         "currency_id": currency_id,
+        "split_method": "unequal", # Assuming default for these tests
         "participant_shares": participants,
     }
     response = await client.post(
@@ -708,10 +742,14 @@ async def test_update_expense_change_amount_and_custom_shares_success(
     response = await client.put(
         f"/api/v1/expenses/{expense_id}", json=update_payload, headers=normal_user_token_headers
     )
-    assert response.status_code == status.HTTP_200_OK
+    assert response.status_code == status.HTTP_200_OK, f"Failed: {response.text}"
     data = response.json()
     assert data["amount"] == updated_amount
     assert data["description"] == "Updated Amount and Shares"
+    assert not data["is_settled"] # Should remain unsettled
+    assert data["receipt_image_url"] is None
+    assert data["split_method"] == "unequal" # Original was unequal, not changed by this update type
+    assert data["selected_participant_user_ids"] is None
 
     participant_details = data["participant_details"]
     assert len(participant_details) == 2
@@ -776,9 +814,14 @@ async def test_update_expense_change_amount_only_recalculate_equal_shares(
     response = await client.put(
         f"/api/v1/expenses/{expense_id}", json=update_payload, headers=normal_user_token_headers
     )
-    assert response.status_code == status.HTTP_200_OK
+    assert response.status_code == status.HTTP_200_OK, f"Failed: {response.text}"
     data = response.json()
     assert data["amount"] == new_total_amount
+    assert not data["is_settled"] # Should remain unsettled
+    assert data["receipt_image_url"] is None
+    assert data["split_method"] == "unequal" # Original method was unequal
+    assert data["selected_participant_user_ids"] is None
+
 
     participant_details = data["participant_details"]
     assert len(participant_details) == 2 # Should still be 2 participants
@@ -841,8 +884,13 @@ async def test_update_expense_auth_payer_can_update(
     response = await client.put(
         f"/api/v1/expenses/{expense_id}", json=update_payload, headers=normal_user_token_headers
     )
-    assert response.status_code == status.HTTP_200_OK
-    assert response.json()["description"] == "Payer Updated"
+    assert response.status_code == status.HTTP_200_OK, f"Failed: {response.text}"
+    data = response.json()
+    assert data["description"] == "Payer Updated"
+    assert not data["is_settled"] # Should remain unsettled
+    assert data["receipt_image_url"] is None
+    assert data["split_method"] == "unequal" # Original was unequal
+    assert data["selected_participant_user_ids"] is None
 
 @pytest.mark.asyncio
 async def test_update_expense_auth_other_user_cannot_update_non_group_non_participant(
@@ -890,8 +938,13 @@ async def test_update_expense_auth_participant_can_update_non_group(
     response = await client.put(
         f"/api/v1/expenses/{expense_id}", json=update_payload, headers=participant_headers
     )
-    assert response.status_code == status.HTTP_200_OK
-    assert response.json()["description"] == "Updated by Participant"
+    assert response.status_code == status.HTTP_200_OK, f"Failed: {response.text}"
+    data = response.json()
+    assert data["description"] == "Updated by Participant"
+    assert not data["is_settled"] # Should remain unsettled
+    assert data["receipt_image_url"] is None
+    assert data["split_method"] == "unequal"
+    assert data["selected_participant_user_ids"] is None
 
 @pytest.mark.asyncio
 async def test_update_expense_auth_group_member_can_update_group_expense(
@@ -929,5 +982,345 @@ async def test_update_expense_auth_group_member_can_update_group_expense(
     response = await client.put(
         f"/api/v1/expenses/{expense_id}", json=update_payload, headers=group_member_headers
     )
-    assert response.status_code == status.HTTP_200_OK
-    assert response.json()["description"] == "Updated by Group Member"
+    assert response.status_code == status.HTTP_200_OK, f"Failed: {response.text}"
+    data = response.json()
+    assert data["description"] == "Updated by Group Member"
+    assert not data["is_settled"] # Should remain unsettled
+    assert data["receipt_image_url"] is None
+    assert data["split_method"] == "unequal" # Initial creation was unequal
+    assert data["selected_participant_user_ids"] is None
+
+
+# V. Tests for Payer Selection
+@pytest.mark.asyncio
+async def test_create_expense_designate_self_as_payer(
+    client: AsyncClient,
+    normal_user_token_headers: dict[str, str],
+    test_user: User,
+    test_currency: Currency,
+):
+    expense_payload = {
+        "description": "Self Payer Test",
+        "amount": 50.0,
+        "currency_id": test_currency.id,
+        "paid_by_user_id": test_user.id, # Designating self
+        "split_method": "unequal", # Payer is sole participant by default if no shares
+    }
+    response = await client.post(
+        "/api/v1/expenses/service/", json=expense_payload, headers=normal_user_token_headers
+    )
+    assert response.status_code == status.HTTP_201_CREATED, f"Failed: {response.text}"
+    data = response.json()
+    assert data["paid_by_user"]["id"] == test_user.id
+    assert not data["is_settled"]
+    assert len(data["participant_details"]) == 1
+    assert data["participant_details"][0]["user"]["id"] == test_user.id
+    assert data["participant_details"][0]["share_amount"] == 50.0
+
+@pytest.mark.asyncio
+async def test_create_expense_designate_other_user_as_payer_non_group(
+    client: AsyncClient,
+    normal_user_token_headers: dict[str, str], # User1 creates
+    test_user_2: User, # User2 will be designated payer
+    test_currency: Currency,
+):
+    expense_payload = {
+        "description": "Other Payer Non-Group",
+        "amount": 70.0,
+        "currency_id": test_currency.id,
+        "paid_by_user_id": test_user_2.id, # User1 designates User2 as payer
+        "split_method": "unequal",
+        # User2 (payer) will be sole participant
+    }
+    response = await client.post(
+        "/api/v1/expenses/service/", json=expense_payload, headers=normal_user_token_headers
+    )
+    assert response.status_code == status.HTTP_201_CREATED, f"Failed: {response.text}"
+    data = response.json()
+    assert data["paid_by_user"]["id"] == test_user_2.id
+    assert not data["is_settled"]
+    assert len(data["participant_details"]) == 1
+    assert data["participant_details"][0]["user"]["id"] == test_user_2.id
+    assert data["participant_details"][0]["share_amount"] == 70.0
+
+@pytest.mark.asyncio
+async def test_create_group_expense_creator_pays_other_member_participates(
+    client: AsyncClient,
+    normal_user_token_headers: dict[str, str], # test_user's token
+    test_user: User, # Creator and payer
+    test_user_2: User, # Participant
+    test_group_shared_with_user2: Group, # Group with test_user and test_user_2
+    test_currency: Currency,
+):
+    expense_payload = {
+        "description": "Group Expense, Creator Pays",
+        "amount": 100.0,
+        "currency_id": test_currency.id,
+        "group_id": test_group_shared_with_user2.id,
+        "paid_by_user_id": test_user.id, # Creator pays
+        "split_method": "equal",
+        "selected_participant_user_ids": [test_user.id, test_user_2.id],
+    }
+    response = await client.post(
+        "/api/v1/expenses/service/", json=expense_payload, headers=normal_user_token_headers
+    )
+    assert response.status_code == status.HTTP_201_CREATED, f"Failed: {response.text}"
+    data = response.json()
+    assert data["paid_by_user"]["id"] == test_user.id
+    assert not data["is_settled"]
+    assert data["group_id"] == test_group_shared_with_user2.id
+    assert len(data["participant_details"]) == 2
+
+@pytest.mark.asyncio
+async def test_create_group_expense_other_member_pays(
+    client: AsyncClient,
+    normal_user_token_headers: dict[str, str], # test_user's token (creator)
+    test_user: User, # Creator
+    test_user_2: User, # Designated payer and participant
+    test_group_shared_with_user2: Group,
+    test_currency: Currency,
+):
+    expense_payload = {
+        "description": "Group Expense, Other Member Pays",
+        "amount": 120.0,
+        "currency_id": test_currency.id,
+        "group_id": test_group_shared_with_user2.id,
+        "paid_by_user_id": test_user_2.id, # test_user_2 (member) pays
+        "split_method": "equal",
+        "selected_participant_user_ids": [test_user.id, test_user_2.id],
+    }
+    response = await client.post(
+        "/api/v1/expenses/service/", json=expense_payload, headers=normal_user_token_headers
+    )
+    assert response.status_code == status.HTTP_201_CREATED, f"Failed: {response.text}"
+    data = response.json()
+    assert data["paid_by_user"]["id"] == test_user_2.id
+    assert not data["is_settled"]
+    assert data["group_id"] == test_group_shared_with_user2.id
+    assert len(data["participant_details"]) == 2
+
+@pytest.mark.asyncio
+async def test_create_group_expense_fail_payer_not_in_group(
+    client: AsyncClient,
+    normal_user_token_headers: dict[str, str], # test_user's token (creator)
+    test_user: User, # Creator (member of test_group)
+    test_user_3_with_token: dict, # User not in the group
+    test_group: Group, # Group created by test_user, test_user_3 is NOT a member
+    test_currency: Currency,
+):
+    other_user_id = test_user_3_with_token["user"].id
+    expense_payload = {
+        "description": "Payer Not In Group Fail",
+        "amount": 100.0,
+        "currency_id": test_currency.id,
+        "group_id": test_group.id,
+        "paid_by_user_id": other_user_id, # This user is not in test_group
+        "split_method": "unequal",
+        "participant_shares": [{"user_id": test_user.id, "share_amount": 100.0}],
+    }
+    response = await client.post(
+        "/api/v1/expenses/service/", json=expense_payload, headers=normal_user_token_headers
+    )
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert "Designated payer is not a member of the group" in response.json()["detail"]
+
+@pytest.mark.asyncio
+async def test_create_group_expense_fail_creator_not_in_group(
+    client: AsyncClient,
+    test_user_3_with_token: dict, # Creator, but not part of target_group
+    test_group: Group, # Group created by test_user (normal_user)
+    test_currency: Currency,
+):
+    creator_headers = test_user_3_with_token["headers"]
+    creator_id = test_user_3_with_token["user"].id
+
+    expense_payload = {
+        "description": "Creator Not In Group Fail",
+        "amount": 100.0,
+        "currency_id": test_currency.id,
+        "group_id": test_group.id, # Target group test_user_3 is not a member of
+        "paid_by_user_id": creator_id,
+        "split_method": "unequal",
+        "participant_shares": [{"user_id": creator_id, "share_amount": 100.0}],
+    }
+    response = await client.post(
+        "/api/v1/expenses/service/", json=expense_payload, headers=creator_headers
+    )
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert "Creator must be a member of the group" in response.json()["detail"]
+
+@pytest.mark.asyncio
+async def test_create_group_expense_fail_participant_not_in_group(
+    client: AsyncClient,
+    normal_user_token_headers: dict[str, str], # test_user's token (creator)
+    test_user: User, # Creator (member of test_group)
+    test_user_3_with_token: dict, # User not in the group, attempted participant
+    test_group: Group, # Group created by test_user
+    test_currency: Currency,
+):
+    non_member_participant_id = test_user_3_with_token["user"].id
+    expense_payload = {
+        "description": "Participant Not In Group Fail",
+        "amount": 100.0,
+        "currency_id": test_currency.id,
+        "group_id": test_group.id,
+        "paid_by_user_id": test_user.id,
+        "split_method": "equal",
+        "selected_participant_user_ids": [test_user.id, non_member_participant_id],
+    }
+    response = await client.post(
+        "/api/v1/expenses/service/", json=expense_payload, headers=normal_user_token_headers
+    )
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert f"Participant user ID {non_member_participant_id} is not a member of the group" in response.json()["detail"]
+
+# VI. Tests for Split Methods
+# Equal Split
+@pytest.mark.asyncio
+async def test_create_expense_equal_split_success(
+    client: AsyncClient,
+    normal_user_token_headers: dict[str, str],
+    test_user: User,
+    test_user_2: User,
+    test_currency: Currency,
+):
+    amount = 101.0  # Amount that doesn't divide perfectly
+    participants = [test_user.id, test_user_2.id]
+    expense_payload = {
+        "description": "Equal Split Test",
+        "amount": amount,
+        "currency_id": test_currency.id,
+        "paid_by_user_id": test_user.id,
+        "split_method": "equal",
+        "selected_participant_user_ids": participants,
+    }
+    response = await client.post("/api/v1/expenses/service/", json=expense_payload, headers=normal_user_token_headers)
+    assert response.status_code == status.HTTP_201_CREATED, f"Failed: {response.text}"
+    data = response.json()
+    assert not data["is_settled"]
+    assert data["split_method"] == "equal"
+    assert sorted(data["selected_participant_user_ids"]) == sorted(participants)
+    assert len(data["participant_details"]) == 2
+
+    shares = [p["share_amount"] for p in data["participant_details"]]
+    assert sum(shares) == amount
+    # Check individual shares (50.50 each, one might have remainder)
+    assert 50.49 < shares[0] < 50.51 or 50.49 < shares[1] < 50.51 # Basic check for near equality
+    # More precise: one should be 50.50, other 50.50 due to rounding logic for 101.0 / 2
+    # With current remainder logic (add to first):
+    user1_share = next(p["share_amount"] for p in data["participant_details"] if p["user"]["id"] == participants[0])
+    user2_share = next(p["share_amount"] for p in data["participant_details"] if p["user"]["id"] == participants[1])
+
+    # For 101.0 / 2 = 50.5. individual_share = 50.50. remainder = 0.
+    # So both should be 50.50
+    assert user1_share == 50.50
+    assert user2_share == 50.50
+
+
+@pytest.mark.asyncio
+async def test_create_expense_equal_split_fail_no_participants_selected(
+    client: AsyncClient, normal_user_token_headers: dict[str, str], test_user: User, test_currency: Currency
+):
+    expense_payload = {
+        "description": "Equal Split No Participants",
+        "amount": 100.0,
+        "currency_id": test_currency.id,
+        "paid_by_user_id": test_user.id,
+        "split_method": "equal",
+        "selected_participant_user_ids": None, # Missing
+    }
+    response = await client.post("/api/v1/expenses/service/", json=expense_payload, headers=normal_user_token_headers)
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert "selected_participant_user_ids is required" in response.json()["detail"]
+
+    expense_payload["selected_participant_user_ids"] = [] # Empty list
+    response = await client.post("/api/v1/expenses/service/", json=expense_payload, headers=normal_user_token_headers)
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert "Participant list cannot be empty" in response.json()["detail"]
+
+# Percentage Split
+@pytest.mark.asyncio
+async def test_create_expense_percentage_split_success(
+    client: AsyncClient, normal_user_token_headers: dict[str, str], test_user: User, test_user_2: User, test_currency: Currency
+):
+    amount = 200.0
+    shares_percent = [
+        {"user_id": test_user.id, "share_amount": 60.0}, # 60%
+        {"user_id": test_user_2.id, "share_amount": 40.0}, # 40%
+    ]
+    expense_payload = {
+        "description": "Percentage Split Test",
+        "amount": amount,
+        "currency_id": test_currency.id,
+        "paid_by_user_id": test_user.id,
+        "split_method": "percentage",
+        "participant_shares": shares_percent,
+    }
+    response = await client.post("/api/v1/expenses/service/", json=expense_payload, headers=normal_user_token_headers)
+    assert response.status_code == status.HTTP_201_CREATED, f"Failed: {response.text}"
+    data = response.json()
+    assert not data["is_settled"]
+    assert data["split_method"] == "percentage"
+    assert data["selected_participant_user_ids"] is None
+
+    details_user1 = next((p for p in data["participant_details"] if p["user"]["id"] == test_user.id), None)
+    details_user2 = next((p for p in data["participant_details"] if p["user"]["id"] == test_user_2.id), None)
+
+    assert details_user1 is not None and details_user1["share_amount"] == 120.0 # 60% of 200
+    assert details_user2 is not None and details_user2["share_amount"] == 80.0  # 40% of 200
+
+@pytest.mark.asyncio
+async def test_create_expense_percentage_split_fail_sum_not_100(
+    client: AsyncClient, normal_user_token_headers: dict[str, str], test_user: User, test_user_2: User, test_currency: Currency
+):
+    expense_payload = {
+        "description": "Percentage Sum Fail",
+        "amount": 100.0,
+        "currency_id": test_currency.id,
+        "paid_by_user_id": test_user.id,
+        "split_method": "percentage",
+        "participant_shares": [
+            {"user_id": test_user.id, "share_amount": 50.0},
+            {"user_id": test_user_2.id, "share_amount": 40.0}, # Sums to 90%
+        ],
+    }
+    response = await client.post("/api/v1/expenses/service/", json=expense_payload, headers=normal_user_token_headers)
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert "Percentages must sum up to 100" in response.json()["detail"]
+
+@pytest.mark.asyncio
+async def test_create_expense_percentage_split_fail_invalid_percentage_value(
+    client: AsyncClient, normal_user_token_headers: dict[str, str], test_user: User, test_currency: Currency
+):
+    expense_payload = {
+        "description": "Invalid Percentage Value",
+        "amount": 100.0,
+        "currency_id": test_currency.id,
+        "paid_by_user_id": test_user.id,
+        "split_method": "percentage",
+        "participant_shares": [{"user_id": test_user.id, "share_amount": 110.0}], # > 100
+    }
+    response = await client.post("/api/v1/expenses/service/", json=expense_payload, headers=normal_user_token_headers)
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert "Invalid percentage" in response.json()["detail"]
+
+    expense_payload["participant_shares"] = [{"user_id": test_user.id, "share_amount": 0.0}] # Zero
+    response = await client.post("/api/v1/expenses/service/", json=expense_payload, headers=normal_user_token_headers)
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert "Invalid percentage" in response.json()["detail"]
+
+@pytest.mark.asyncio
+async def test_create_expense_percentage_split_fail_no_shares_provided(
+    client: AsyncClient, normal_user_token_headers: dict[str, str], test_user: User, test_currency: Currency
+):
+    expense_payload = {
+        "description": "Percentage No Shares",
+        "amount": 100.0,
+        "currency_id": test_currency.id,
+        "paid_by_user_id": test_user.id,
+        "split_method": "percentage",
+        "participant_shares": None, # Missing
+    }
+    response = await client.post("/api/v1/expenses/service/", json=expense_payload, headers=normal_user_token_headers)
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert "participant_shares is required for 'percentage' split" in response.json()["detail"]

@@ -1,397 +1,380 @@
 import pytest
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession # No change
 from typing import List, Dict, Any, Optional
 
-from src.models.models import (
+from app.src.models.models import ( # Corrected paths
     User,
     Group,
     Expense,
     Currency,
     ExpenseParticipant,
-)  # Corrected import
-from src.models.schemas import UserRead, CurrencyRead  # Corrected import
-from src.main import app  # Import your FastAPI app, Corrected import
-from tests.conftest import TestingSessionLocal  # Import TestingSessionLocal
-from src.core.security import get_password_hash  # Import get_password_hash
+    UserGroupLink, # Added
+)
+from app.src.models.schemas import UserRead, CurrencyRead, UserOverallBalance, GroupBalanceSummary # Added new schemas
+from app.src.main import app
+from app.tests.conftest import TestingSessionLocal, test_engine as engine # Corrected import for TestingSessionLocal
+from app.src.core.security import get_password_hash
 
 
 # Helper function to create a user (can be moved to a conftest.py later)
 async def create_test_user(
-    # session: AsyncSession, # Session will be created internally
     username: str = "testuser",
     email: str = "test@example.com",
     password: str = "Testpassword123",
+    async_db_session: AsyncSession, # Added session parameter
+    username: str = "testuser",
+    email: str = "test@example.com",
+    password: str = "Testpassword123",
+    id: Optional[int] = None, # Added id for easier reference
 ) -> User:
     user = User(
+        id=id,
         username=username,
         email=email,
-        hashed_password=get_password_hash(password),  # Use get_password_hash
+        hashed_password=get_password_hash(password),
+        email_verified=True # Assume verified for these tests
     )
-    async with TestingSessionLocal() as session:
-        session.add(user)
-        await session.commit()
-        await session.refresh(user)
-        return user
+    async_db_session.add(user)
+    await async_db_session.commit()
+    await async_db_session.refresh(user)
+    return user
 
 
 # Helper function to create a currency
 async def create_test_currency(
-    # session: AsyncSession, # Session will be created internally
+    async_db_session: AsyncSession, # Added session parameter
     code: str = "USD",
     name: str = "US Dollar",
     symbol: str = "$",
+    id: Optional[int] = None, # Added id
 ) -> Currency:
-    currency = Currency(code=code, name=name, symbol=symbol)
-    async with TestingSessionLocal() as session:
-        session.add(currency)
-        await session.commit()
-        await session.refresh(currency)
-        return currency
+    currency = Currency(id=id, code=code, name=name, symbol=symbol)
+    async_db_session.add(currency)
+    await async_db_session.commit()
+    await async_db_session.refresh(currency)
+    return currency
+
+# Helper function to create a group
+async def create_test_group(
+    async_db_session: AsyncSession, # Added session parameter
+    name: str,
+    created_by_user_id: int,
+    members_ids: List[int],
+    id: Optional[int] = None, # Added id
+) -> Group:
+    group = Group(id=id, name=name, created_by_user_id=created_by_user_id)
+    async_db_session.add(group)
+    await async_db_session.commit()
+    await async_db_session.refresh(group)
+    for member_id in members_ids:
+        link = UserGroupLink(user_id=member_id, group_id=group.id)
+        async_db_session.add(link)
+    await async_db_session.commit()
+    await async_db_session.refresh(group, attribute_names=['members'])
+    return group
 
 
 # Helper function to create an expense
 async def create_test_expense(
-    # session: AsyncSession, # Session will be created internally
+    async_db_session: AsyncSession, # Added session parameter
     description: str,
     amount: float,
     currency_id: int,
     paid_by_user_id: int,
     group_id: Optional[int] = None,
-    participants: Optional[
+    participants_data: Optional[
         List[Dict[str, Any]]
-    ] = None,  # e.g., [{"user_id": 1, "share_amount": 10.0}]
+    ] = None,  # e.g., [{"user_id": 1, "share_amount": 10.0, "settled_amount": 0.0}]
+    id: Optional[int] = None, # Added id
 ) -> Expense:
     expense = Expense(
+        id=id,
         description=description,
         amount=amount,
         currency_id=currency_id,
         paid_by_user_id=paid_by_user_id,
         group_id=group_id,
     )
-    async with TestingSessionLocal() as session:
-        session.add(expense)
-        await session.commit()
-        await session.refresh(expense)
+    async_db_session.add(expense)
+    await async_db_session.commit()
+    await async_db_session.refresh(expense)
 
-        if participants:
-            for p_data in participants:
-                participant = ExpenseParticipant(
-                    expense_id=expense.id,
-                    user_id=p_data["user_id"],
-                    share_amount=p_data["share_amount"],
-                )
-                session.add(participant)
-            await session.commit()
-            await session.refresh(
-                expense, attribute_names=["participants"]
-            )  # Refresh to load participants
-        return expense
-
-
-@pytest.mark.asyncio
-async def test_get_balances_no_expenses(
-    client: AsyncClient, db_setup_session: AsyncSession, normal_user_token_headers: dict
-):
-    # db_setup_session is an autouse fixture for setup/teardown, not for direct use here.
-    # Helpers will use TestingSessionLocal.
-    response = await client.get(
-        "/api/v1/balances/me", headers=normal_user_token_headers
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["balances"] == []
+    if participants_data:
+        for p_data in participants_data:
+            participant = ExpenseParticipant(
+                expense_id=expense.id,
+                user_id=p_data["user_id"],
+                share_amount=p_data["share_amount"],
+                settled_amount_in_transaction_currency=p_data.get("settled_amount", 0.0)
+            )
+            async_db_session.add(participant)
+        await async_db_session.commit()
+        # Refresh to load all_participant_details relationship
+        await async_db_session.refresh(expense, attribute_names=['all_participant_details'])
+    return expense
 
 
 @pytest.mark.asyncio
-async def test_get_balances_user_paid_no_participants(
+async def test_get_my_overall_balances_no_expenses( # Renamed test, new response schema
     client: AsyncClient,
-    db_setup_session: AsyncSession,
+    # db_session: AsyncSession, # Removed, db_setup_session is autouse, helpers manage own sessions
     normal_user_token_headers: dict,
     normal_user: User,
 ):
-    # Create a currency
-    currency = await create_test_currency(
-        code="USD", name="US Dollar"
-    )  # Removed db_setup_session
-
-    # Create an expense paid by the current user
-    await create_test_expense(
-        # db_setup_session, # Removed
-        description="Lunch",
-        amount=50.0,
-        currency_id=currency.id,
-        paid_by_user_id=normal_user.id,
-        participants=[],  # No other participants
-    )
-
-    response = await client.get(
-        "/api/v1/balances/me", headers=normal_user_token_headers
-    )
+    response = await client.get("/api/v1/balances/me", headers=normal_user_token_headers)
     assert response.status_code == 200
-    data = response.json()
+    data = UserOverallBalance.model_validate(response.json())
 
-    assert len(data["balances"]) == 1
-    balance = data["balances"][0]
-    assert balance["currency"]["code"] == "USD"
-    assert balance["total_paid"] == 50.0
-    assert balance["net_owed_to_user"] == 0.0
-    assert balance["net_user_owes"] == 0.0
-
+    assert data.user_id == normal_user.id
+    assert not data.total_you_owe_by_currency
+    assert not data.total_owed_to_you_by_currency
+    assert not data.net_overall_balance_by_currency
+    assert not data.breakdown_by_group
+    assert not data.detailed_debts_by_currency
+    assert not data.detailed_credits_by_currency
 
 @pytest.mark.asyncio
-async def test_get_balances_user_paid_others_owe(
+async def test_get_my_overall_balances_user_paid_others_owe( # Renamed, adapted
     client: AsyncClient,
-    db_setup_session: AsyncSession,
+    # db_session: AsyncSession, # Removed
     normal_user_token_headers: dict,
     normal_user: User,
 ):
-    user2 = await create_test_user(
-        username="user2", email="user2@example.com"
-    )  # Removed db_setup_session
-    currency = await create_test_currency(
-        code="EUR", name="Euro"
-    )  # Removed db_setup_session
+    user2 = await create_test_user(username="user2bal", email="user2bal@example.com", id=102)
+    currency_eur = await create_test_currency(code="EUR", name="Euro", id=101)
+
+    group1 = await create_test_group("Group Bal Test", normal_user.id, members_ids=[normal_user.id, user2.id], id=101)
 
     await create_test_expense(
-        # db_setup_session, # Removed
-        description="Dinner",
+        description="Dinner EUR",
         amount=100.0,
-        currency_id=currency.id,
-        paid_by_user_id=normal_user.id,
-        participants=[
-            {"user_id": user2.id, "share_amount": 40.0},
-            # normal_user's share is implied (100 - 40 = 60)
-        ],
-    )
-
-    response = await client.get(
-        "/api/v1/balances/me", headers=normal_user_token_headers
-    )
-    assert response.status_code == 200
-    data = response.json()
-
-    assert len(data["balances"]) == 1
-    balance = data["balances"][0]
-    assert balance["currency"]["code"] == "EUR"
-    assert balance["total_paid"] == 100.0
-    assert balance["net_owed_to_user"] == 40.0
-    assert balance["net_user_owes"] == 0.0
-
-
-@pytest.mark.asyncio
-async def test_get_balances_user_owes_others(
-    client: AsyncClient,
-    db_setup_session: AsyncSession,
-    normal_user_token_headers: dict,
-    normal_user: User,
-):
-    payer_user = await create_test_user(
-        username="payeruser", email="payer@example.com"
-    )  # Removed db_setup_session
-    currency = await create_test_currency(
-        code="GBP", name="British Pound"
-    )  # Removed db_setup_session
-
-    await create_test_expense(
-        # db_setup_session, # Removed
-        description="Concert Tickets",
-        amount=120.0,
-        currency_id=currency.id,
-        paid_by_user_id=payer_user.id,
-        participants=[
-            {"user_id": normal_user.id, "share_amount": 60.0},
-            {
-                "user_id": payer_user.id,
-                "share_amount": 60.0,
-            },  # Payer also listed as participant for their share
-        ],
-    )
-
-    response = await client.get(
-        "/api/v1/balances/me", headers=normal_user_token_headers
-    )
-    assert response.status_code == 200
-    data = response.json()
-
-    assert len(data["balances"]) == 1
-    balance = data["balances"][0]
-    assert balance["currency"]["code"] == "GBP"
-    assert balance["total_paid"] == 0.0  # Current user paid nothing
-    assert balance["net_owed_to_user"] == 0.0
-    assert balance["net_user_owes"] == 60.0
-
-
-@pytest.mark.asyncio
-async def test_get_balances_multiple_expenses_same_currency(
-    client: AsyncClient,
-    db_setup_session: AsyncSession,
-    normal_user_token_headers: dict,
-    normal_user: User,
-):
-    user2 = await create_test_user(
-        username="user2_multi_same", email="user2ms@example.com"
-    )  # Removed db_setup_session
-    payer_user = await create_test_user(
-        username="payer_multi_same", email="payerms@example.com"
-    )  # Removed db_setup_session
-    currency_usd = await create_test_currency(
-        code="USD", name="US Dollar"
-    )  # Removed db_setup_session
-
-    # Expense 1: Current user pays, user2 owes
-    await create_test_expense(
-        # db_setup_session, # Removed
-        description="Groceries",
-        amount=80.0,
-        currency_id=currency_usd.id,
-        paid_by_user_id=normal_user.id,
-        participants=[{"user_id": user2.id, "share_amount": 30.0}],
-    )
-    # Expense 2: Payer_user pays, current_user owes
-    await create_test_expense(
-        # db_setup_session, # Removed
-        description="Movies",
-        amount=50.0,
-        currency_id=currency_usd.id,
-        paid_by_user_id=payer_user.id,
-        participants=[{"user_id": normal_user.id, "share_amount": 25.0}],
-    )
-    # Expense 3: Current user pays for self only
-    await create_test_expense(
-        # db_setup_session, # Removed
-        description="Coffee",
-        amount=5.0,
-        currency_id=currency_usd.id,
-        paid_by_user_id=normal_user.id,
-        participants=[],
-    )
-
-    response = await client.get(
-        "/api/v1/balances/me", headers=normal_user_token_headers
-    )
-    assert response.status_code == 200
-    data = response.json()
-
-    assert len(data["balances"]) == 1
-    balance_usd = data["balances"][0]
-    assert balance_usd["currency"]["code"] == "USD"
-    assert balance_usd["total_paid"] == 80.0 + 5.0  # 85.0
-    assert balance_usd["net_owed_to_user"] == 30.0
-    assert balance_usd["net_user_owes"] == 25.0
-
-
-@pytest.mark.asyncio
-async def test_get_balances_expenses_in_different_currencies(
-    client: AsyncClient,
-    db_setup_session: AsyncSession,
-    normal_user_token_headers: dict,
-    normal_user: User,
-):
-    user2 = await create_test_user(
-        username="user2_multi_diff", email="user2md@example.com"
-    )  # Removed db_setup_session
-    payer_user_eur = await create_test_user(
-        username="payer_eur", email="payereur@example.com"
-    )  # Removed db_setup_session
-
-    currency_usd = await create_test_currency(
-        code="USD", name="US Dollar"
-    )  # Removed db_setup_session
-    currency_eur = await create_test_currency(
-        code="EUR", name="Euro"
-    )  # Removed db_setup_session
-
-    # USD Expense: Current user pays, user2 owes
-    await create_test_expense(
-        # db_setup_session, # Removed
-        description="Lunch USD",
-        amount=60.0,
-        currency_id=currency_usd.id,
-        paid_by_user_id=normal_user.id,
-        participants=[{"user_id": user2.id, "share_amount": 20.0}],
-    )
-    # EUR Expense: payer_user_eur pays, current_user owes
-    await create_test_expense(
-        # db_setup_session, # Removed
-        description="Train Ticket EUR",
-        amount=70.0,
         currency_id=currency_eur.id,
-        paid_by_user_id=payer_user_eur.id,
-        participants=[{"user_id": normal_user.id, "share_amount": 30.0}],
-    )
-
-    response = await client.get(
-        "/api/v1/balances/me", headers=normal_user_token_headers
-    )
-    assert response.status_code == 200
-    data = response.json()
-
-    assert len(data["balances"]) == 2
-
-    usd_balance = next(
-        (b for b in data["balances"] if b["currency"]["code"] == "USD"), None
-    )
-    eur_balance = next(
-        (b for b in data["balances"] if b["currency"]["code"] == "EUR"), None
-    )
-
-    assert usd_balance is not None
-    assert usd_balance["total_paid"] == 60.0
-    assert usd_balance["net_owed_to_user"] == 20.0
-    assert usd_balance["net_user_owes"] == 0.0
-
-    assert eur_balance is not None
-    assert eur_balance["total_paid"] == 0.0
-    assert eur_balance["net_owed_to_user"] == 0.0
-    assert eur_balance["net_user_owes"] == 30.0
-
-
-@pytest.mark.asyncio
-async def test_get_balances_user_payer_and_participant(
-    client: AsyncClient,
-    db_setup_session: AsyncSession,
-    normal_user_token_headers: dict,
-    normal_user: User,
-):
-    # This tests an edge case. Typically, a payer's "share" is implied or they aren't listed as a participant for their own portion.
-    # However, if they are explicitly listed, the logic should handle it.
-    # The current logic in router for `net_owed_to_user` sums up shares of *other* users when normal_user is the payer.
-    # If normal_user is also listed as a participant in an expense they paid, their share as a participant
-    # won't be double-counted towards `net_owed_to_user` nor towards `net_user_owes`.
-
-    user2 = await create_test_user(
-        username="user2_edge", email="user2edge@example.com"
-    )  # Removed db_setup_session
-    currency = await create_test_currency(
-        code="CAD", name="Canadian Dollar"
-    )  # Removed db_setup_session
-
-    await create_test_expense(
-        # db_setup_session, # Removed
-        description="Shared Software Subscription",
-        amount=100.0,
-        currency_id=currency.id,
-        paid_by_user_id=normal_user.id,  # Current user paid
-        participants=[
-            {
-                "user_id": normal_user.id,
-                "share_amount": 50.0,
-            },  # Current user's own share
-            {"user_id": user2.id, "share_amount": 50.0},  # User2's share
+        paid_by_user_id=normal_user.id,
+        group_id=group1.id,
+        participants_data=[
+            {"user_id": normal_user.id, "share_amount": 60.0}, # Payer's share
+            {"user_id": user2.id, "share_amount": 40.0},     # User2 owes 40
         ],
     )
 
-    response = await client.get(
-        "/api/v1/balances/me", headers=normal_user_token_headers
-    )
+    response = await client.get("/api/v1/balances/me", headers=normal_user_token_headers)
     assert response.status_code == 200
-    data = response.json()
+    data = UserOverallBalance.model_validate(response.json())
 
-    assert len(data["balances"]) == 1
-    balance = data["balances"][0]
-    assert balance["currency"]["code"] == "CAD"
-    assert balance["total_paid"] == 100.0
-    # net_owed_to_user should only include amounts from *other* participants
-    assert balance["net_owed_to_user"] == 50.0
-    assert balance["net_user_owes"] == 0.0
+    assert data.user_id == normal_user.id
+    assert data.total_owed_to_you_by_currency.get("EUR") == 40.0
+    assert not data.total_you_owe_by_currency.get("EUR")
+    assert data.net_overall_balance_by_currency.get("EUR") == 40.0
+
+    assert len(data.detailed_credits_by_currency.get("EUR", [])) == 1
+    credit_detail = data.detailed_credits_by_currency["EUR"][0]
+    assert credit_detail.owed_by_user_id == user2.id
+    assert credit_detail.amount == 40.0
+    assert credit_detail.currency_code == "EUR"
+
+    assert len(data.breakdown_by_group) == 1
+    group_breakdown = data.breakdown_by_group[0]
+    assert group_breakdown.group_id == group1.id
+    assert group_breakdown.your_net_balance_in_group == 40.0 # 40 owed to user1 by user2
+    assert group_breakdown.currency_code == "EUR"
+
+
+@pytest.mark.asyncio
+async def test_get_my_overall_balances_user_owes_others( # Renamed, adapted
+    client: AsyncClient,
+    # db_session: AsyncSession, # Removed
+    normal_user_token_headers: dict,
+    normal_user: User,
+):
+    payer_user = await create_test_user(username="payeruserbal", email="payerbal@example.com", id=103)
+    currency_gbp = await create_test_currency(code="GBP", name="British Pound", id=102)
+    group1 = await create_test_group("Group Bal Test 2", normal_user.id, members_ids=[normal_user.id, payer_user.id], id=102)
+
+    await create_test_expense(
+        description="Concert Tickets GBP",
+        amount=120.0,
+        currency_id=currency_gbp.id,
+        paid_by_user_id=payer_user.id, # Payer is other user
+        group_id=group1.id,
+        participants_data=[
+            {"user_id": normal_user.id, "share_amount": 60.0}, # Current user's share
+            {"user_id": payer_user.id, "share_amount": 60.0},  # Payer's share
+        ],
+    )
+
+    response = await client.get("/api/v1/balances/me", headers=normal_user_token_headers)
+    assert response.status_code == 200
+    data = UserOverallBalance.model_validate(response.json())
+
+    assert data.user_id == normal_user.id
+    assert data.total_you_owe_by_currency.get("GBP") == 60.0
+    assert not data.total_owed_to_you_by_currency.get("GBP")
+    assert data.net_overall_balance_by_currency.get("GBP") == -60.0
+
+    assert len(data.detailed_debts_by_currency.get("GBP", [])) == 1
+    debt_detail = data.detailed_debts_by_currency["GBP"][0]
+    assert debt_detail.owes_user_id == payer_user.id
+    assert debt_detail.amount == 60.0
+    assert debt_detail.currency_code == "GBP"
+
+@pytest.mark.asyncio
+async def test_get_my_overall_balances_multi_currency_complex( # New test for overall balance
+    client: AsyncClient,
+    # db_session: AsyncSession, # Removed
+    normal_user_token_headers: dict,
+    normal_user: User,
+):
+    user2 = await create_test_user(username="user2compl", email="user2compl@example.com", id=201)
+    user3 = await create_test_user(username="user3compl", email="user3compl@example.com", id=202)
+    usd = await create_test_currency(code="USD", name="US Dollar", id=201)
+    eur = await create_test_currency(code="EUR", name="Euro", id=202)
+
+    group1 = await create_test_group("G1 Bal", normal_user.id, members_ids=[normal_user.id, user2.id], id=201)
+    group2 = await create_test_group("G2 Bal", normal_user.id, members_ids=[normal_user.id, user3.id], id=202)
+
+    # G1: normal_user paid 100 USD for self,user2 (50 each). user2 owes normal_user 50 USD.
+    await create_test_expense("Lunch G1 USD", 100.0, usd.id, normal_user.id, group1.id,
+                              participants_data=[{"user_id": normal_user.id, "share_amount": 50.0},
+                                                 {"user_id": user2.id, "share_amount": 50.0}])
+    # G1: user2 paid 80 EUR for self,normal_user (40 each). normal_user owes user2 40 EUR.
+    await create_test_expense("Taxi G1 EUR", 80.0, eur.id, user2.id, group1.id,
+                              participants_data=[{"user_id": normal_user.id, "share_amount": 40.0},
+                                                 {"user_id": user2.id, "share_amount": 40.0}])
+    # G2: normal_user paid 60 USD for self,user3 (30 each). user3 owes normal_user 30 USD.
+    await create_test_expense("Coffee G2 USD", 60.0, usd.id, normal_user.id, group2.id,
+                              participants_data=[{"user_id": normal_user.id, "share_amount": 30.0},
+                                                 {"user_id": user3.id, "share_amount": 30.0}])
+    # G2: user3 paid 20 EUR for self,normal_user (10 each). normal_user owes user3 10 EUR.
+    await create_test_expense("Snacks G2 EUR", 20.0, eur.id, user3.id, group2.id,
+                              participants_data=[{"user_id": normal_user.id, "share_amount": 10.0},
+                                                 {"user_id": user3.id, "share_amount": 10.0}])
+
+    response = await client.get("/api/v1/balances/me", headers=normal_user_token_headers)
+    assert response.status_code == 200
+    data = UserOverallBalance.model_validate(response.json())
+
+    assert data.total_owed_to_you_by_currency.get("USD") == 80.0 # 50 from user2, 30 from user3
+    assert data.total_you_owe_by_currency.get("EUR") == 50.0    # 40 to user2, 10 to user3
+    assert data.net_overall_balance_by_currency.get("USD") == 80.0
+    assert data.net_overall_balance_by_currency.get("EUR") == -50.0
+
+    assert len(data.detailed_credits_by_currency.get("USD", [])) == 2
+    assert len(data.detailed_debts_by_currency.get("EUR", [])) == 2
+
+    assert len(data.breakdown_by_group) == 4 # G1-USD, G1-EUR, G2-USD, G2-EUR
+
+
+# --- Tests for GET /groups/{group_id}/balances ---
+
+@pytest.mark.asyncio
+async def test_get_group_balances_not_a_member(
+    client: AsyncClient,
+    # db_session: AsyncSession, # Removed
+    normal_user_token_headers: dict, # Belongs to normal_user
+    normal_user: User,
+):
+    other_user = await create_test_user(username="othergroupuser", email="othergu@example.com", id=301)
+    group_other = await create_test_group("Other's Group", other_user.id, members_ids=[other_user.id], id=301)
+
+    response = await client.get(f"/api/v1/groups/{group_other.id}/balances", headers=normal_user_token_headers)
+    assert response.status_code == 403 # Or 404 if combined, router logic specific
+
+@pytest.mark.asyncio
+async def test_get_group_balances_group_not_found(
+    client: AsyncClient,
+    # db_session: AsyncSession, # Removed
+    normal_user_token_headers: dict,
+):
+    non_existent_group_id = 99999
+    response = await client.get(f"/api/v1/groups/{non_existent_group_id}/balances", headers=normal_user_token_headers)
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_group_balances_simple_case(
+    client: AsyncClient,
+    # db_session: AsyncSession, # Removed
+    normal_user_token_headers: dict,
+    normal_user: User,
+):
+    user2 = await create_test_user(username="user2grp", email="user2grp@example.com", id=401)
+    currency_usd = await create_test_currency(code="USD", name="US Dollar", id=401)
+    group1 = await create_test_group("Group Test Simple", normal_user.id, members_ids=[normal_user.id, user2.id], id=401)
+
+    # normal_user paid 100 USD for self,user2 (50 each). user2 owes normal_user 50 USD.
+    await create_test_expense(
+        "Dinner USD Group", 100.0, currency_usd.id, normal_user.id, group1.id,
+        participants_data=[{"user_id": normal_user.id, "share_amount": 50.0},
+                           {"user_id": user2.id, "share_amount": 50.0}]
+    )
+
+    response = await client.get(f"/api/v1/groups/{group1.id}/balances", headers=normal_user_token_headers)
+    assert response.status_code == 200
+    data = GroupBalanceSummary.model_validate(response.json())
+
+    assert data.group_id == group1.id
+    assert data.group_name == group1.name
+    assert len(data.members_balances) == 2
+
+    nu_balance = next(mb for mb in data.members_balances if mb.user_id == normal_user.id)
+    u2_balance = next(mb for mb in data.members_balances if mb.user_id == user2.id)
+
+    assert nu_balance.others_owe_user_total == 50.0
+    assert nu_balance.owes_others_total == 0.0
+    assert nu_balance.net_balance_in_group == 50.0
+    assert len(nu_balance.credits_from_specific_users_by_currency.get("USD",[])) == 1
+    assert nu_balance.credits_from_specific_users_by_currency["USD"][0].owed_by_user_id == user2.id
+    assert nu_balance.credits_from_specific_users_by_currency["USD"][0].amount == 50.0
+
+    assert u2_balance.owes_others_total == 50.0
+    assert u2_balance.others_owe_user_total == 0.0
+    assert u2_balance.net_balance_in_group == -50.0
+    assert len(u2_balance.debts_to_specific_users_by_currency.get("USD",[])) == 1
+    assert u2_balance.debts_to_specific_users_by_currency["USD"][0].owes_user_id == normal_user.id
+    assert u2_balance.debts_to_specific_users_by_currency["USD"][0].amount == 50.0
+
+
+@pytest.mark.asyncio
+async def test_get_group_balances_with_settlement(
+    client: AsyncClient,
+    # db_session: AsyncSession, # Removed
+    normal_user_token_headers: dict,
+    normal_user: User,
+):
+    user2 = await create_test_user(username="user2settle", email="user2settle@example.com", id=501)
+    currency_cad = await create_test_currency(code="CAD", name="Canadian Dollar", id=501)
+    group1 = await create_test_group("Group Settle Test", normal_user.id, members_ids=[normal_user.id, user2.id], id=501)
+
+    # normal_user paid 100 CAD for self,user2 (50 each). user2's share 50 CAD.
+    # user2's participation is partially settled by 20 CAD.
+    await create_test_expense(
+        "Event CAD Group", 100.0, currency_cad.id, normal_user.id, group1.id,
+        participants_data=[
+            {"user_id": normal_user.id, "share_amount": 50.0},
+            {"user_id": user2.id, "share_amount": 50.0, "settled_amount": 20.0} # user2 owes 30 CAD
+        ]
+    )
+
+    response = await client.get(f"/api/v1/groups/{group1.id}/balances", headers=normal_user_token_headers)
+    assert response.status_code == 200
+    data = GroupBalanceSummary.model_validate(response.json())
+
+    nu_balance = next(mb for mb in data.members_balances if mb.user_id == normal_user.id)
+    u2_balance = next(mb for mb in data.members_balances if mb.user_id == user2.id)
+
+    # normal_user is owed 30 CAD by user2
+    assert nu_balance.others_owe_user_total == 30.0
+    assert nu_balance.credits_from_specific_users_by_currency["CAD"][0].amount == 30.0
+
+    # user2 owes 30 CAD to normal_user
+    assert u2_balance.owes_others_total == 30.0
+    assert u2_balance.debts_to_specific_users_by_currency["CAD"][0].amount == 30.0
+
+# Note: The original test_get_balances_user_payer_and_participant is effectively covered by how shares are defined.
+# The new balance calculation logic correctly handles payer participation if their share is listed.
+# The important part is that the service correctly calculates who owes whom based on (share_amount - paid_amount_for_that_share_by_participant).
+# Payer's own share doesn't make them owe themselves.
+# The new overall and group balance endpoints rely on the service layer tests for these core calculation details.
+# The integration tests here focus more on the API request/response structure and basic correctness.
+# More complex calculation scenarios are better tested at the service layer (test_balance_service.py).

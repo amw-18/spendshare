@@ -1,3 +1,8 @@
+import json
+import shutil
+import os
+import uuid
+from fastapi import UploadFile, File # Added for file upload
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Body, status
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -17,6 +22,7 @@ from src.models.models import (
 from src.models import schemas
 from src.core.security import get_current_user
 from src.utils import get_object_or_404
+from src.services.expense_service import update_expense_settlement_status # Added import
 
 router = APIRouter(
     prefix="/expenses",
@@ -33,58 +39,159 @@ async def create_expense_with_participants_endpoint(
     expense_in: schemas.ExpenseCreate,
     current_user: User = Depends(get_current_user),
 ) -> schemas.ExpenseRead:
+    # Determine the actual payer
+    payer_id = current_user.id
+    if expense_in.paid_by_user_id is not None:
+        # Validate the provided paid_by_user_id
+        payer_user = await get_object_or_404(session, User, expense_in.paid_by_user_id, "Payer user not found.")
+        payer_id = payer_user.id
+
     # Validate currency_id
     await get_object_or_404(session, Currency, expense_in.currency_id, "Currency not found.")
 
-    # Validate group_id if provided
+    # Validate group_id if provided and permissions
     if expense_in.group_id:
-        await get_object_or_404(session, Group, expense_in.group_id, "Group not found.")
-
-    participants_for_db = []
-
-    try:
-        if expense_in.participant_shares:
-            # Case 1: Custom shares are provided
-            seen_user_ids = set()
-            sum_of_shares = 0.0
-
-            for share_detail in expense_in.participant_shares:
-                # Validate participant user_id
-                await get_object_or_404(session, User, share_detail.user_id, f"Participant user ID {share_detail.user_id} not found.")
-
-                # Check for duplicate user_ids in the input
-                if share_detail.user_id in seen_user_ids:
-                    await session.rollback()
-                    raise HTTPException(
-                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                        detail=f"Duplicate user ID {share_detail.user_id} in participant shares.",
-                    )
-                seen_user_ids.add(share_detail.user_id)
-                sum_of_shares += share_detail.share_amount
-                participants_for_db.append(
-                    {"user_id": share_detail.user_id, "share_amount": share_detail.share_amount}
-                )
-
-            # Validate sum of shares against total expense amount
-            # Using a small tolerance for float comparison (e.g., 0.01 for currency)
-            if abs(sum_of_shares - expense_in.amount) > 1e-2: # Adjusted tolerance for currency
-                await session.rollback()
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail=f"Sum of participant shares ({sum_of_shares:.2f}) does not match total expense amount ({expense_in.amount:.2f}).",
-                )
-        else:
-            # Case 2: No custom shares provided, payer is the only participant
-            # Validate current_user.id (though typically guaranteed by Depends)
-            await get_object_or_404(session, User, current_user.id, "Current user not found.")
-            participants_for_db.append(
-                {"user_id": current_user.id, "share_amount": expense_in.amount}
+        group = await get_object_or_404(session, Group, expense_in.group_id, "Group not found.")
+        # Check if current_user (creator) is a member of the group
+        current_user_is_member = any(member.id == current_user.id for member in group.members)
+        if not current_user_is_member:
+            # This check might need adjustment based on product requirements (e.g., group admins)
+            # For now, creator must be a member.
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Creator must be a member of the group to add expenses.",
             )
 
+        # If a specific payer is designated, check if that payer is also a member of the group
+        if expense_in.paid_by_user_id is not None and expense_in.paid_by_user_id != current_user.id:
+            payer_is_member = any(member.id == expense_in.paid_by_user_id for member in group.members)
+            if not payer_is_member:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Designated payer is not a member of the group.",
+                )
+    participants_for_db = []
+    group_members_if_group_expense = None
+    if expense_in.group_id and group: # group object fetched earlier
+        group_members_if_group_expense = {member.id for member in group.members}
+
+    try:
+        # --- SPLIT METHOD LOGIC ---
+        if expense_in.split_method == schemas.SplitMethodEnum.EQUAL:
+            if not expense_in.selected_participant_user_ids:
+                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="selected_participant_user_ids is required for 'equal' split.")
+            if not expense_in.selected_participant_user_ids: # Should be caught by above, but defensive
+                 raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="No participants selected for equal split.")
+
+            num_participants = len(expense_in.selected_participant_user_ids)
+            if num_participants == 0: # Explicitly check for empty list if it bypasses the None check
+                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Participant list cannot be empty for equal split.")
+
+            individual_share = round(expense_in.amount / num_participants, 2) # Using 2 decimal places for currency
+
+            # Distribute remainder for precision
+            remainder = round(expense_in.amount - (individual_share * num_participants), 2)
+
+            seen_user_ids = set()
+            for i, user_id in enumerate(expense_in.selected_participant_user_ids):
+                await get_object_or_404(session, User, user_id, f"Participant user ID {user_id} not found.")
+                if group_members_if_group_expense and user_id not in group_members_if_group_expense:
+                    raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Participant user ID {user_id} is not a member of the group.")
+                if user_id in seen_user_ids:
+                    raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Duplicate user ID {user_id} in selected_participant_user_ids.")
+                seen_user_ids.add(user_id)
+
+                current_share = individual_share
+                if i == 0 and remainder != 0: # Add remainder to the first participant
+                    current_share = round(individual_share + remainder, 2)
+
+                participants_for_db.append({"user_id": user_id, "share_amount": current_share})
+
+        elif expense_in.split_method == schemas.SplitMethodEnum.PERCENTAGE:
+            if not expense_in.participant_shares:
+                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="participant_shares is required for 'percentage' split.")
+
+            total_percentage = 0.0
+            calculated_shares = []
+            seen_user_ids = set()
+
+            for share_detail in expense_in.participant_shares:
+                await get_object_or_404(session, User, share_detail.user_id, f"Participant user ID {share_detail.user_id} not found.")
+                if group_members_if_group_expense and share_detail.user_id not in group_members_if_group_expense:
+                    raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Participant user ID {share_detail.user_id} is not a member of the group.")
+                if share_detail.user_id in seen_user_ids:
+                    raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Duplicate user ID {share_detail.user_id} in participant shares.")
+                seen_user_ids.add(share_detail.user_id)
+
+                if not (0 < share_detail.share_amount <= 100): # Percentage must be > 0 and <= 100
+                     raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Invalid percentage {share_detail.share_amount} for user {share_detail.user_id}. Must be between 0 (exclusive) and 100 (inclusive).")
+                total_percentage += share_detail.share_amount
+                calculated_shares.append({"user_id": share_detail.user_id, "percentage": share_detail.share_amount})
+
+            if abs(total_percentage - 100.0) > 1e-2: # Using tolerance for 100% check
+                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Percentages must sum up to 100. Current sum: {total_percentage:.2f}%.")
+
+            actual_sum_of_calculated_shares = 0.0
+            for i, cs in enumerate(calculated_shares):
+                share_value = round((cs["percentage"] / 100.0) * expense_in.amount, 2)
+                participants_for_db.append({"user_id": cs["user_id"], "share_amount": share_value})
+                actual_sum_of_calculated_shares += share_value
+
+            # Adjust for rounding differences against total expense amount
+            remainder = round(expense_in.amount - actual_sum_of_calculated_shares, 2)
+            if abs(remainder) > 1e-9 and participants_for_db: # If there's a non-negligible remainder
+                participants_for_db[0]["share_amount"] = round(participants_for_db[0]["share_amount"] + remainder, 2)
+
+
+        elif expense_in.split_method == schemas.SplitMethodEnum.UNEQUAL:
+            if not expense_in.participant_shares:
+                 # For 'unequal', if no shares provided, it implies payer takes all. This is handled later.
+                 # If shares are explicitly empty list [], that's an error for non-zero amount.
+                if expense_in.participant_shares == []: # Explicit empty list
+                    if abs(expense_in.amount) > 1e-9: # If amount is not zero
+                        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Participant shares cannot be an empty list for 'unequal' split with non-zero amount.")
+                    # If amount is zero, empty list is fine, no participants.
+                # If None, then payer covers all. This is handled by the 'else' block after all split methods.
+
+            # This block processes if participant_shares is provided and not empty for 'unequal'
+            if expense_in.participant_shares: # Not None and not empty (empty list handled above)
+                seen_user_ids = set()
+                sum_of_shares = 0.0
+                for share_detail in expense_in.participant_shares:
+                    await get_object_or_404(session, User, share_detail.user_id, f"Participant user ID {share_detail.user_id} not found.")
+                    if group_members_if_group_expense and share_detail.user_id not in group_members_if_group_expense:
+                        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Participant user ID {share_detail.user_id} is not a member of the group.")
+                    if share_detail.user_id in seen_user_ids:
+                        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Duplicate user ID {share_detail.user_id} in participant shares.")
+                    seen_user_ids.add(share_detail.user_id)
+                    if share_detail.share_amount <= 1e-9: # Share must be positive
+                        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Share amount for user {share_detail.user_id} must be positive for 'unequal' split.")
+
+                    sum_of_shares += share_detail.share_amount
+                    participants_for_db.append({"user_id": share_detail.user_id, "share_amount": share_detail.share_amount})
+
+                if abs(sum_of_shares - expense_in.amount) > 1e-2:
+                    raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Sum of participant shares ({sum_of_shares:.2f}) does not match total expense amount ({expense_in.amount:.2f}) for 'unequal' split.")
+
+        # Default case: If no specific split method processed shares, or if 'unequal' had no participant_shares (payer takes all)
+        if not participants_for_db:
+            if abs(expense_in.amount) > 1e-9: # If amount is not zero, payer is the sole participant
+                await get_object_or_404(session, User, payer_id, "Payer (for default participation) not found.")
+                participants_for_db.append({"user_id": payer_id, "share_amount": expense_in.amount})
+            # If amount is zero and no participants, it's fine. participants_for_db remains empty.
+
         # Create the Expense object
-        db_expense = Expense.model_validate(
-            expense_in, update={"paid_by_user_id": current_user.id}
-        )
+        expense_data_for_model = expense_in.model_dump(exclude={"split_method", "selected_participant_user_ids", "participant_shares"})
+        expense_data_for_model["paid_by_user_id"] = payer_id
+
+        # Store split_method and selected_participant_user_ids_json
+        expense_data_for_model["split_method"] = expense_in.split_method.value if expense_in.split_method else schemas.SplitMethodEnum.UNEQUAL.value
+        if expense_in.split_method == schemas.SplitMethodEnum.EQUAL and expense_in.selected_participant_user_ids:
+            expense_data_for_model["selected_participant_user_ids_json"] = json.dumps(expense_in.selected_participant_user_ids)
+        else:
+            expense_data_for_model["selected_participant_user_ids_json"] = None
+
+        db_expense = Expense(**expense_data_for_model)
         session.add(db_expense)
         await session.flush()  # Assigns an ID to db_expense
 
@@ -157,13 +264,65 @@ async def create_expense_endpoint(
     # Validate currency_id
     await get_object_or_404(session, Currency, expense_in.currency_id)
 
-    if expense_in.group_id:
-        await get_object_or_404(session, Group, expense_in.group_id)  # Check existence
+    # Determine the actual payer
+    payer_id = current_user.id
+    if expense_in.paid_by_user_id is not None:
+        payer_user = await get_object_or_404(session, User, expense_in.paid_by_user_id, "Payer user not found.")
+        payer_id = payer_user.id
 
-    db_expense = Expense.model_validate(
-        expense_in, update={"paid_by_user_id": current_user.id}
-    )
+    # Validate currency_id
+    await get_object_or_404(session, Currency, expense_in.currency_id)
+
+    # Validate group_id if provided and permissions
+    if expense_in.group_id:
+        group = await get_object_or_404(session, Group, expense_in.group_id, "Group not found.")
+        # Check if current_user (creator) is a member of the group
+        current_user_is_member = any(member.id == current_user.id for member in group.members)
+        if not current_user_is_member:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Creator must be a member of the group to add expenses.",
+            )
+
+        # If a specific payer is designated, check if that payer is also a member of the group
+        if expense_in.paid_by_user_id is not None and expense_in.paid_by_user_id != current_user.id:
+            payer_is_member = any(member.id == expense_in.paid_by_user_id for member in group.members)
+            if not payer_is_member:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Designated payer is not a member of the group.",
+                )
+
+    # Create the Expense object, ensuring paid_by_user_id is set to the determined payer_id
+    # For this simple endpoint, participant_shares are not processed.
+    # The payer (payer_id) is implicitly the sole participant.
+    expense_data_for_model = expense_in.model_dump(exclude={"split_method", "selected_participant_user_ids", "participant_shares"})
+    expense_data_for_model["paid_by_user_id"] = payer_id
+
+    # For this simple endpoint, split_method is implicitly "unequal" and no specific selected_participant_user_ids.
+    expense_data_for_model["split_method"] = schemas.SplitMethodEnum.UNEQUAL.value
+    expense_data_for_model["selected_participant_user_ids_json"] = None
+
+    db_expense = Expense(**expense_data_for_model)
     session.add(db_expense)
+
+    # Add the payer as the sole participant
+    # This was missing previously if this endpoint is to truly represent a single-payer expense
+    # where the payer covers the whole amount.
+    # If participant_shares were allowed here, this would be more complex.
+    # Assuming this endpoint creates an expense where the payer_id is the only participant.
+    sole_participant = ExpenseParticipant(
+        expense_id=db_expense.id, # This will be set after flush
+        user_id=payer_id,
+        share_amount=db_expense.amount
+    )
+    # Need to flush to get db_expense.id before creating ExpenseParticipant
+    # Or, handle it similarly to create_expense_with_participants_endpoint
+
+    await session.flush() # Get expense ID
+    sole_participant.expense_id = db_expense.id # Set it now
+    session.add(sole_participant)
+
     await session.commit()
     await session.refresh(db_expense)
 
@@ -172,6 +331,7 @@ async def create_expense_endpoint(
         select(Expense)
         .where(Expense.id == db_expense.id)
         .options(selectinload(Expense.currency), selectinload(Expense.paid_by))
+        # Participants will be loaded by _get_expense_read_details
     )
     result = await session.exec(stmt)
     refreshed_db_expense = result.one_or_none()
@@ -182,8 +342,6 @@ async def create_expense_endpoint(
             detail="Failed to re-fetch expense after creation with full details",
         )
 
-    # Manually construct and return ExpenseRead with participant_details
-    # For simple creation, participants are not added here, so participant_details will be empty.
     return await _get_expense_read_details(
         session=session, db_expense=refreshed_db_expense
     )
@@ -559,6 +717,7 @@ async def settle_expenses_endpoint(
 
     results: List[schemas.SettlementResultItem] = []
     updated_participants_to_commit = []
+    affected_expense_ids = set() # To store IDs of expenses whose participants were updated
 
     # Check for duplicate expense_participant_ids in the request upfront
     seen_ep_ids_in_request = set()
@@ -638,15 +797,11 @@ async def settle_expenses_endpoint(
         expense_participant.settled_transaction_id = transaction.id
         expense_participant.settled_amount_in_transaction_currency = item.settled_amount
 
-        # TODO:
-        # Potentially mark the original Expense as fully settled if all its participations are settled.
-        # This logic is more complex and would require fetching all participants for the expense.
-        # For now, just update the ExpenseParticipant. This can also be a background task maybe?
-
         session.add(expense_participant)
         updated_participants_to_commit.append(
             expense_participant
         )  # Keep track for commit
+        affected_expense_ids.add(expense_participant.expense_id) # Track affected expense
 
         results.append(
             schemas.SettlementResultItem(
@@ -659,9 +814,15 @@ async def settle_expenses_endpoint(
         )
 
     if updated_participants_to_commit:  # Only commit if there are successful updates
-        await session.commit()
+        await session.commit() # Commit changes to ExpenseParticipant first
         for ep in updated_participants_to_commit:
             await session.refresh(ep)  # Refresh to get any DB-side updates if necessary
+
+        # After successful settlement of participants, update parent expense statuses
+        for expense_id in affected_expense_ids:
+            await update_expense_settlement_status(expense_id, session)
+
+        await session.commit() # Commit changes to Expense statuses
 
     return schemas.SettlementResponse(
         status="Completed",
@@ -784,5 +945,146 @@ async def _get_expense_read_details(
         "currency_id": db_expense.currency_id,
         "currency": currency_for_schema,
         "participant_details": participant_details_list,
+        "receipt_image_url": db_expense.receipt_image_url, # Added
+        "split_method": schemas.SplitMethodEnum(db_expense.split_method) if db_expense.split_method else None, # Added
+        "selected_participant_user_ids": json.loads(db_expense.selected_participant_user_ids_json) if db_expense.selected_participant_user_ids_json else None, # Added
     }
     return schemas.ExpenseRead.model_validate(expense_read_data)
+
+
+# Additional imports for receipt upload
+import shutil
+import os
+import uuid
+from fastapi import UploadFile, File
+
+# Define upload directory relative to app root
+UPLOAD_DIR_RECEIPTS = "uploads/receipts"
+# Ensure UPLOAD_DIR_RECEIPTS is created if it doesn't exist when the app starts.
+# This can be done in main.py or here using a startup event if complex,
+# or simply by checking and creating in the endpoint for simplicity here.
+
+@router.post("/{expense_id}/upload-receipt", response_model=schemas.ExpenseRead)
+async def upload_expense_receipt_endpoint(
+    *,
+    session: AsyncSession = Depends(get_session),
+    expense_id: int,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    db_expense = await session.get(
+        Expense,
+        expense_id,
+        options=[
+            selectinload(Expense.paid_by),
+            selectinload(Expense.group).selectinload(Group.members),
+        ],
+    )
+
+    if not db_expense:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expense not found")
+
+    # Authorization: Current user must be the payer or a member of the group if it's a group expense.
+    # More granular: could be creator, or involved participant. For now, payer or group member.
+    is_payer = db_expense.paid_by_user_id == current_user.id
+    is_group_member_of_expense_group = False
+    if db_expense.group:
+        is_group_member_of_expense_group = any(member.id == current_user.id for member in db_expense.group.members)
+
+    if not (is_payer or is_group_member_of_expense_group):
+        # If not a group expense, only payer can upload.
+        if not db_expense.group and not is_payer:
+             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to upload receipt for this expense.")
+        # If it is a group expense, and user is neither payer nor member.
+        if db_expense.group and not (is_payer or is_group_member_of_expense_group):
+             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to upload receipt for this group expense.")
+
+
+    # Basic file validation (content type and size)
+    if file.content_type not in ["image/jpeg", "image/png", "image/gif"]:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid file type. Only JPG, PNG, GIF allowed.")
+
+    # Size limit (e.g., 5MB)
+    # file.file is a SpooledTemporaryFile. We can check its size.
+    # To get actual size, we need to read it or seek to end.
+    # file.file.seek(0, os.SEEK_END)
+    # file_size = file.file.tell()
+    # file.file.seek(0) # Reset cursor
+    # if file_size > 5 * 1024 * 1024: # 5MB
+    #     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File size exceeds 5MB limit.")
+
+
+    # Create unique filename and path
+    # Ensure the root UPLOAD_DIR_RECEIPTS exists (important for first upload)
+    # The path stored in DB should be relative to where static files are served from.
+    # e.g. if static files served from "static/", and uploads go to "static/receipts/", then URL is "receipts/filename.ext"
+
+    # For local dev, let's assume UPLOAD_DIR_RECEIPTS is directly under 'app' or project root,
+    # and FastAPI will serve it from a path like /static/receipts.
+    # So, the path stored in DB will be "receipts/unique_filename.ext"
+
+    # Correctly create the uploads directory if it doesn't exist relative to the script's execution path (app root)
+    # This assumes the script runs from the project root where 'app' is a subdir.
+    # If running from 'app' dir, then UPLOAD_DIR_RECEIPTS should be relative to 'app'.
+    # Given `cd app` is used, paths are relative to `/app` directory.
+
+    # Base directory for uploads within the 'app' directory
+    # This means uploads will be in 'app/uploads/receipts'
+    # Static serving should be configured for 'app/uploads' or 'app/uploads/receipts' later.
+
+    # The UPLOAD_DIR_RECEIPTS = "uploads/receipts" is relative to where the app is running from.
+    # If main.py is in app/src, and we are in app/ CWD, then this path is app/uploads/receipts.
+
+    # Let's ensure the full absolute path for os.makedirs
+    # This should be relative to the project root, not the script file.
+    # For the sandbox, assuming current working directory is /app
+
+    # Path for storing files: app/uploads/receipts
+    # Path for URL: /uploads/receipts/filename.ext (if /uploads is served as static)
+
+    # Simplified: Assume UPLOAD_DIR_RECEIPTS is relative to the app's root (where main.py is, usually app/src or app/)
+    # For safety, let's make it relative to the current file's directory structure if possible, or use absolute paths for clarity.
+    # However, for deployment, relative paths from a known root are better.
+    # Let's assume 'uploads' is at the same level as 'src' inside 'app'.
+    # So, if expenses.py is in app/src/routers, then path is ../../uploads/receipts
+
+    # Given the project structure, 'app' is the root for backend.
+    # So, 'app/uploads/receipts' seems correct.
+
+    # Create the directory path
+    # The path should be formed from a known base, like the app's root directory.
+    # For the tool environment, `os.getcwd()` when `cd app` has been run is `/app`.
+    # So, `os.path.join(os.getcwd(), UPLOAD_DIR_RECEIPTS)` would be `/app/uploads/receipts`.
+
+    upload_dir_full_path = os.path.join(os.getcwd(), UPLOAD_DIR_RECEIPTS) # os.getcwd() is /app here
+    os.makedirs(upload_dir_full_path, exist_ok=True)
+
+    _, extension = os.path.splitext(file.filename)
+    unique_filename = f"{uuid.uuid4()}{extension}"
+    file_location = os.path.join(upload_dir_full_path, unique_filename)
+
+    # Save the file
+    try:
+        with open(file_location, "wb+") as file_object:
+            shutil.copyfileobj(file.file, file_object)
+    except Exception as e:
+        # Log error e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Could not save file: {str(e)}")
+    finally:
+        file.file.close() # Ensure file is closed
+
+    # Store relative path for URL (e.g., "/uploads/receipts/filename.ext" or "receipts/filename.ext")
+    # This depends on how static files will be mounted.
+    # If FastAPI serves a directory named "uploads_mounted_statically" which points to "app/uploads",
+    # then the URL would be "/uploads_mounted_statically/receipts/unique_filename.ext"
+    # For simplicity, let's store the path relative from "uploads" dir.
+    # So, "receipts/unique_filename.ext". The static mount point will handle the "uploads" part.
+    relative_file_path = os.path.join(UPLOAD_DIR_RECEIPTS.split('/')[-1], unique_filename) # e.g. "receipts/filename.ext"
+
+
+    db_expense.receipt_image_url = relative_file_path
+    session.add(db_expense)
+    await session.commit()
+    await session.refresh(db_expense)
+
+    return await _get_expense_read_details(session=session, db_expense=db_expense)

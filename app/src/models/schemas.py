@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict
 from sqlmodel import SQLModel
 from datetime import datetime
 from pydantic import BaseModel, constr, EmailStr, Field, field_validator
@@ -119,6 +119,64 @@ class UserEmailChangeRequest(BaseModel):
     new_email: EmailStr
     password: str # Current password
 
+# Balance Schemas from workstream_balance_calculation.md
+
+class DebtDetail(SQLModel):
+    owes_user_id: int
+    owes_username: str
+    amount: float
+    currency_code: str # Added as per feature doc considerations
+
+class CreditDetail(SQLModel):
+    owed_by_user_id: int
+    owed_by_username: str
+    amount: float
+    currency_code: str # Added as per feature doc considerations
+
+class UserGroupBalance(SQLModel):
+    user_id: int
+    username: str
+    owes_others_total: float = 0.0
+    others_owe_user_total: float = 0.0
+    net_balance_in_group: float = 0.0
+    # Storing debts/credits by currency code for clarity
+    debts_to_specific_users_by_currency: Dict[str, List[DebtDetail]] = Field(default_factory=dict)
+    credits_from_specific_users_by_currency: Dict[str, List[CreditDetail]] = Field(default_factory=dict)
+    # Simpler lists for overall debts/credits if needed, but by_currency is more precise
+    # debts_to_specific_users: List[DebtDetail] = Field(default_factory=list)
+    # credits_from_specific_users: List[CreditDetail] = Field(default_factory=list)
+
+class GroupBalanceSummary(SQLModel):
+    group_id: int
+    group_name: str
+    # Balances per member, per currency.
+    # The list structure implies one UserGroupBalance object per user in the group.
+    # Each UserGroupBalance will then internally break down amounts by currency.
+    members_balances: List[UserGroupBalance]
+
+class GroupBalanceUserPerspective(SQLModel):
+    group_id: int
+    group_name: str
+    your_net_balance_in_group: float # This could be a dict if multiple currencies are involved
+    currency_code: str # Specifies the currency of your_net_balance_in_group
+    # Or, more detailed:
+    # your_net_balance_in_group_by_currency: Dict[str, float] = Field(default_factory=dict)
+
+
+class UserOverallBalance(SQLModel):
+    user_id: int
+    # Aggregated totals, potentially converted to a primary currency or broken down
+    # For now, let's assume these are dictionaries mapping currency_code to amount
+    total_you_owe_by_currency: Dict[str, float] = Field(default_factory=dict)
+    total_owed_to_you_by_currency: Dict[str, float] = Field(default_factory=dict)
+    net_overall_balance_by_currency: Dict[str, float] = Field(default_factory=dict)
+
+    breakdown_by_group: List[GroupBalanceUserPerspective] = Field(default_factory=list)
+
+    # Aggregated debts and credits across all groups, by currency
+    detailed_debts_by_currency: Dict[str, List[DebtDetail]] = Field(default_factory=dict)
+    detailed_credits_by_currency: Dict[str, List[CreditDetail]] = Field(default_factory=dict)
+
 
 # Group Schemas
 class GroupBase(SQLModel):
@@ -153,8 +211,20 @@ class ExpenseBase(SQLModel):
     group_id: Optional[int] = None
 
 
+from enum import Enum
+
+# Enum for Split Methods
+class SplitMethodEnum(str, Enum):
+    EQUAL = "equal"
+    PERCENTAGE = "percentage"
+    UNEQUAL = "unequal"
+
+
 class ExpenseCreate(ExpenseBase):
-    participant_shares: Optional[List[ParticipantShareCreate]] = None
+    paid_by_user_id: Optional[int] = None
+    split_method: Optional[SplitMethodEnum] = Field(default=SplitMethodEnum.UNEQUAL)
+    selected_participant_user_ids: Optional[List[int]] = None # For "equal" split
+    participant_shares: Optional[List[ParticipantShareCreate]] = None # For "unequal" and "percentage"
 
 
 class ExpenseRead(ExpenseBase):
@@ -165,6 +235,15 @@ class ExpenseRead(ExpenseBase):
     currency: Optional["CurrencyRead"] = None  # Added currency
     description: str = Field(default="")
     participant_details: List["ExpenseParticipantReadWithUser"] = []
+    receipt_image_url: Optional[str] = None
+    split_method: Optional[SplitMethodEnum] = None # Added from feature doc
+    # selected_participant_user_ids is not directly on Expense model,
+    # but could be reconstructed or passed if needed for read.
+    # For now, let's assume it's not directly part of ExpenseRead unless specifically needed for display logic
+    # that cannot be inferred from participant_details + split_method.
+    # The feature doc says "Include selected_participant_user_ids if applicable."
+    # This implies it might be useful. Let's add it.
+    selected_participant_user_ids: Optional[List[int]] = None
 
 
 class ExpenseUpdate(SQLModel):
@@ -358,6 +437,24 @@ class SettlementResponse(SQLModel):
     status: str
     message: Optional[str] = None
     updated_expense_participations: List[SettlementResultItem]
+
+
+# Schema for the new /settlements/record-direct-payment endpoint
+class RecordDirectPaymentRequest(SQLModel):
+    debtor_user_id: int # User who owed money and presumably paid
+    creditor_user_id: int # User who was owed money and received payment (original payer of the expense part)
+    amount_paid: float = Field(gt=0)
+    currency_paid_id: int
+    expense_participant_ids_to_settle: List[int]
+
+    @field_validator("expense_participant_ids_to_settle")
+    @classmethod
+    def participant_ids_must_not_be_empty(
+        cls, v: List[int]
+    ) -> List[int]:
+        if not v:
+            raise ValueError("expense_participant_ids_to_settle list cannot be empty.")
+        return v
 
 
 # Beta Interest Schemas
