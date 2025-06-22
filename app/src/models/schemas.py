@@ -153,8 +153,20 @@ class ExpenseBase(SQLModel):
     group_id: Optional[int] = None
 
 
+from enum import Enum
+
+# Enum for Split Methods
+class SplitMethodEnum(str, Enum):
+    EQUAL = "equal"
+    PERCENTAGE = "percentage"
+    UNEQUAL = "unequal"
+
+
 class ExpenseCreate(ExpenseBase):
-    participant_shares: Optional[List[ParticipantShareCreate]] = None
+    paid_by_user_id: Optional[int] = None
+    split_method: Optional[SplitMethodEnum] = Field(default=SplitMethodEnum.UNEQUAL)
+    selected_participant_user_ids: Optional[List[int]] = None # For "equal" split
+    participant_shares: Optional[List[ParticipantShareCreate]] = None # For "unequal" and "percentage"
 
 
 class ExpenseRead(ExpenseBase):
@@ -165,6 +177,15 @@ class ExpenseRead(ExpenseBase):
     currency: Optional["CurrencyRead"] = None  # Added currency
     description: str = Field(default="")
     participant_details: List["ExpenseParticipantReadWithUser"] = []
+    receipt_image_url: Optional[str] = None
+    split_method: Optional[SplitMethodEnum] = None # Added from feature doc
+    # selected_participant_user_ids is not directly on Expense model,
+    # but could be reconstructed or passed if needed for read.
+    # For now, let's assume it's not directly part of ExpenseRead unless specifically needed for display logic
+    # that cannot be inferred from participant_details + split_method.
+    # The feature doc says "Include selected_participant_user_ids if applicable."
+    # This implies it might be useful. Let's add it.
+    selected_participant_user_ids: Optional[List[int]] = None
 
 
 class ExpenseUpdate(SQLModel):
