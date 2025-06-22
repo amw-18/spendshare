@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict
 from sqlmodel import SQLModel
 from datetime import datetime
 from pydantic import BaseModel, constr, EmailStr, Field, field_validator
@@ -118,6 +118,64 @@ class ResendVerificationEmailRequest(BaseModel):
 class UserEmailChangeRequest(BaseModel):
     new_email: EmailStr
     password: str # Current password
+
+# Balance Schemas from workstream_balance_calculation.md
+
+class DebtDetail(SQLModel):
+    owes_user_id: int
+    owes_username: str
+    amount: float
+    currency_code: str # Added as per feature doc considerations
+
+class CreditDetail(SQLModel):
+    owed_by_user_id: int
+    owed_by_username: str
+    amount: float
+    currency_code: str # Added as per feature doc considerations
+
+class UserGroupBalance(SQLModel):
+    user_id: int
+    username: str
+    owes_others_total: float = 0.0
+    others_owe_user_total: float = 0.0
+    net_balance_in_group: float = 0.0
+    # Storing debts/credits by currency code for clarity
+    debts_to_specific_users_by_currency: Dict[str, List[DebtDetail]] = Field(default_factory=dict)
+    credits_from_specific_users_by_currency: Dict[str, List[CreditDetail]] = Field(default_factory=dict)
+    # Simpler lists for overall debts/credits if needed, but by_currency is more precise
+    # debts_to_specific_users: List[DebtDetail] = Field(default_factory=list)
+    # credits_from_specific_users: List[CreditDetail] = Field(default_factory=list)
+
+class GroupBalanceSummary(SQLModel):
+    group_id: int
+    group_name: str
+    # Balances per member, per currency.
+    # The list structure implies one UserGroupBalance object per user in the group.
+    # Each UserGroupBalance will then internally break down amounts by currency.
+    members_balances: List[UserGroupBalance]
+
+class GroupBalanceUserPerspective(SQLModel):
+    group_id: int
+    group_name: str
+    your_net_balance_in_group: float # This could be a dict if multiple currencies are involved
+    currency_code: str # Specifies the currency of your_net_balance_in_group
+    # Or, more detailed:
+    # your_net_balance_in_group_by_currency: Dict[str, float] = Field(default_factory=dict)
+
+
+class UserOverallBalance(SQLModel):
+    user_id: int
+    # Aggregated totals, potentially converted to a primary currency or broken down
+    # For now, let's assume these are dictionaries mapping currency_code to amount
+    total_you_owe_by_currency: Dict[str, float] = Field(default_factory=dict)
+    total_owed_to_you_by_currency: Dict[str, float] = Field(default_factory=dict)
+    net_overall_balance_by_currency: Dict[str, float] = Field(default_factory=dict)
+
+    breakdown_by_group: List[GroupBalanceUserPerspective] = Field(default_factory=list)
+
+    # Aggregated debts and credits across all groups, by currency
+    detailed_debts_by_currency: Dict[str, List[DebtDetail]] = Field(default_factory=dict)
+    detailed_credits_by_currency: Dict[str, List[CreditDetail]] = Field(default_factory=dict)
 
 
 # Group Schemas
