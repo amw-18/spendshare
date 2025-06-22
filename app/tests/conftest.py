@@ -334,6 +334,94 @@ async def verified_user_data_and_headers(mock_send_reg_email: AsyncMock, client:
 
 
 @pytest_asyncio.fixture(scope="function")
+async def test_user_2(new_user_with_token_factory) -> User:
+    """Provides a second distinct user model instance."""
+    data = await new_user_with_token_factory()
+    return data["user"]
+
+@pytest_asyncio.fixture(scope="function")
+async def test_user_2_with_token(new_user_with_token_factory) -> dict:
+    """Provides a second distinct user with their token headers."""
+    return await new_user_with_token_factory()
+
+@pytest_asyncio.fixture(scope="function")
+async def test_user_3_with_token(new_user_with_token_factory) -> dict:
+    """Provides a third distinct user with their token headers."""
+    return await new_user_with_token_factory()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def test_group(
+    async_db_session: AsyncSession, normal_user: User, unique_id_generator
+) -> Group:
+    """Creates a group owned by normal_user."""
+    group = Group(
+        name=f"Test Group {unique_id_generator()}",
+        created_by_user_id=normal_user.id,
+        description="A test group",
+    )
+    async_db_session.add(group)
+    # Add normal_user as a member automatically upon creation by them (if not handled by ORM)
+    # Assuming UserGroupLink is needed if not automatically created by Relationship back_populates
+    # However, the Group model's 'members' Relationship might require explicit linking for creator.
+    # Let's assume for now that group creation implies creator is a member, or test setup handles it.
+    # For safety, one might explicitly add:
+    # link = UserGroupLink(user_id=normal_user.id, group_id=group.id) # group.id is None before commit
+    # async_db_session.add(link)
+    await async_db_session.commit()
+    await async_db_session.refresh(group)
+
+    # Manually add creator as member if not handled by ORM relationships automatically on group creation
+    # Check if user is already a member (e.g. via back_populates or event listeners)
+    # This is often handled by adding the creator to the members list before commit,
+    # or the relationship handles it. For SQLModel, it often requires explicit link model instances.
+    # Let's ensure the creator is linked.
+    # Re-fetch to ensure group.id is available
+    # await async_db_session.refresh(group) # Already did
+    # Check if link exists
+    link_stmt = select(UserGroupLink).where(UserGroupLink.user_id == normal_user.id, UserGroupLink.group_id == group.id)
+    existing_link_result = await async_db_session.exec(link_stmt)
+    if not existing_link_result.first():
+        creator_link = UserGroupLink(user_id=normal_user.id, group_id=group.id)
+        async_db_session.add(creator_link)
+        await async_db_session.commit()
+        await async_db_session.refresh(group) # Refresh group to potentially update its .members
+
+    return group
+
+@pytest_asyncio.fixture(scope="function")
+async def test_group_shared_with_user2(
+    async_db_session: AsyncSession, normal_user: User, test_user_2: User, unique_id_generator
+) -> Group:
+    """Creates a group by normal_user and adds test_user_2 as a member."""
+    group_name = f"Shared Group {unique_id_generator()}"
+    group = Group(
+        name=group_name,
+        created_by_user_id=normal_user.id,
+        description="A test group shared between normal_user and test_user_2",
+    )
+    async_db_session.add(group)
+    await async_db_session.commit() # Commit to get group.id
+    await async_db_session.refresh(group)
+
+    # Add normal_user (creator) as member
+    link_creator = UserGroupLink(user_id=normal_user.id, group_id=group.id)
+    async_db_session.add(link_creator)
+
+    # Add test_user_2 as member
+    link_user2 = UserGroupLink(user_id=test_user_2.id, group_id=group.id)
+    async_db_session.add(link_user2)
+
+    await async_db_session.commit()
+    await async_db_session.refresh(group) # To load members if relationship is configured
+    # To be absolutely sure members are loaded for tests that need it immediately:
+    # stmt = select(Group).where(Group.id == group.id).options(selectinload(Group.members))
+    # result = await async_db_session.exec(stmt)
+    # group = result.one()
+    return group
+
+
+@pytest_asyncio.fixture(scope="function")
 @patch('app.src.core.email.send_verification_email', new_callable=AsyncMock)
 async def pending_user_and_token(mock_send_email: AsyncMock, client: AsyncClient, async_db_session: AsyncSession) -> AsyncGenerator[Dict[str, Any], None]:
     unique_suffix = secrets.token_hex(4)

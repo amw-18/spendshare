@@ -177,6 +177,9 @@ class Expense(SQLModel, table=True):
         back_populates="expense",
         sa_relationship_kwargs={"cascade": "all, delete-orphan", "overlaps": "expenses_participated_in,participants"}
     )
+    receipt_image_url: Optional[str] = Field(default=None, nullable=True)
+    split_method: Optional[str] = Field(default=None, nullable=True) # Stores SplitMethodEnum.value
+    selected_participant_user_ids_json: Optional[str] = Field(default=None, nullable=True) # JSON string list of user IDs for equal split
 
 
 class Currency(SQLModel, table=True):
