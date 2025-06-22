@@ -40,62 +40,89 @@ from typing import Dict, Any # For type hinting fixture data (Dict, Any)
 
 # TEST_DATABASE_PATH = "./test_app_temp.db" # Using in-memory database for tests
 # Use a separate SQLite database for testing
-TEST_DATABASE_URL = "sqlite+aiosqlite:///file:testdb?mode=memory&cache=shared&uri=true"  # Using shared in-memory SQLite for tests
+# Using anonymous in-memory SQLite for true isolation per connection/test series if engine is recreated or handled carefully.
+# For a module-scoped engine, each test function using a new connection from this engine with ':memory:' should get a fresh DB.
+TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
-test_engine = create_async_engine(
-    TEST_DATABASE_URL, echo=False, future=True
-)  # echo=False for cleaner test output
+# test_engine will be created per function in db_setup_session for true isolation
+# test_engine = create_async_engine(
+#     TEST_DATABASE_URL, echo=False # future=True is default now
+# )  # echo=False for cleaner test output
 
-# Async sessionmaker for tests
-TestingSessionLocal = sessionmaker(
-    bind=test_engine, class_=AsyncSession, expire_on_commit=False
-)
+# Async sessionmaker for tests - this will also need to be function-scoped or use a function-scoped engine
+# TestingSessionLocal = sessionmaker(
+#     bind=test_engine, class_=AsyncSession, expire_on_commit=False
+# )
 
 
-# Fixture to override the get_session dependency in the main app
-async def override_get_session() -> AsyncGenerator[AsyncSession, None]:
-    async with TestingSessionLocal() as session:
+@pytest_asyncio.fixture(scope="function")
+async def function_scoped_engine():
+    # Creates a new engine (and thus new in-memory DB) for each test function
+    engine = create_async_engine(TEST_DATABASE_URL, echo=False)
+    yield engine
+    await engine.dispose() # Clean up the engine
+
+@pytest_asyncio.fixture(scope="function")
+async def async_db_session(function_scoped_engine) -> AsyncGenerator[AsyncSession, None]:
+    # Session factory bound to the function-scoped engine
+    ScopedTestingSessionLocal = sessionmaker(
+        bind=function_scoped_engine, class_=AsyncSession, expire_on_commit=False
+    )
+    async with ScopedTestingSessionLocal() as session:
         yield session
 
+# Fixture to override the get_session dependency in the main app
+# This now needs to use the function-scoped session
+async def override_get_session(async_db_session: AsyncSession = pytest.depends(async_db_session)) -> AsyncSession:
+    yield async_db_session
 
 app.dependency_overrides[get_session] = override_get_session
 
 
 @pytest_asyncio.fixture(scope="function", autouse=True)
-async def db_setup_session():
+async def db_setup_session(function_scoped_engine): # Depends on the function-scoped engine
     # Using in-memory database, no file pre-cleanup needed.
-    # SQLModel.metadata.clear() # Clear global metadata
 
-    # Models are already imported globally at the top of this file.
-    # SQLModel.metadata.create_all will use those globally registered models.
-    # No need to re-import here if global imports are comprehensive and correct.
+    # SQLModel.metadata.clear() # Potentially useful if models are defined/imported weirdly, but try without first
+    # Make sure all models are known to SQLModel.metadata before create_all
+    # This is usually handled by ensuring all model files are imported.
+    # Global imports at the top of conftest.py should cover this.
 
-    async with test_engine.begin() as conn:
+    async with function_scoped_engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.drop_all) # Drop first, just in case (though should be fresh DB)
         await conn.run_sync(SQLModel.metadata.create_all)
     yield
-    async with test_engine.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.drop_all)
-
-    # Using in-memory database, no file post-cleanup needed.
+    # No explicit drop_all needed on yield if engine is disposed and DB is in-memory anonymous,
+    # but can be kept for safety or if DB URL changes later.
+    # async with function_scoped_engine.begin() as conn:
+    #     await conn.run_sync(SQLModel.metadata.drop_all)
 
 
 @pytest_asyncio.fixture(
     scope="function"
-)  # "function" scope for client to ensure clean state per test
-async def client() -> AsyncGenerator[AsyncClient, None]:
-    # We need to ensure tables are created before client is used if db_setup_session isn't session-scoped autouse
-    # However, with db_setup_session as autouse=True and scope="session", tables are handled globally.
-    async with AsyncClient(transport=ASGITransport(app), base_url="http://test") as ac:
+)
+async def client(async_db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]: # Client now depends on async_db_session to ensure DB is up
+    # The override_get_session ensures the app uses the same test session as the fixtures.
+    # db_setup_session (autouse) ensures tables are created before this client is used.
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
 
-@pytest_asyncio.fixture(scope="function")
-async def async_db_session() -> AsyncGenerator[AsyncSession, None]:
-    async with TestingSessionLocal() as session:
-        yield session
-
-
 # User Fixtures
+# Now helpers like create_test_user in test_balances.py will use the `TestingSessionLocal`
+# which needs to be updated to use the function_scoped_engine or receive a session.
+# For simplicity, fixtures that create data will use the `async_db_session` directly.
+
+# This global TestingSessionLocal is problematic if engine is function-scoped.
+# It should be created within async_db_session or use the session from there.
+# For helpers in other files, they will need to be passed the function-scoped session.
+# I'll adjust the `TestingSessionLocal` in `test_balances.py` helpers.
+# For fixtures in *this* conftest, they should use `async_db_session`.
+
+# Remove the global TestingSessionLocal definition based on module-scoped engine
+# TestingSessionLocal = sessionmaker(
+#     bind=test_engine, class_=AsyncSession, expire_on_commit=False
+# )
 @pytest_asyncio.fixture
 async def normal_user() -> AsyncGenerator[User, None]:
     user = User(

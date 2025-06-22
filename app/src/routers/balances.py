@@ -1,78 +1,91 @@
-from typing import Dict
-from fastapi import APIRouter, Depends
+from typing import Dict, List # Added List
+from fastapi import APIRouter, Depends, HTTPException # Added HTTPException
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import select
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 from sqlalchemy import or_
 
-from src.db.database import get_session
-from src.models.models import (
+from app.src.db.database import get_session # Corrected import path
+from app.src.models.models import ( # Corrected import path
     User,
     Expense,
     ExpenseParticipant,
+    Group, # Added Group
+    UserGroupLink, # Added UserGroupLink
 )
-from src.models.schemas import (
-    UserBalanceResponse,
-    CurrencyBalance,
-    CurrencyRead,
+from app.src.models.schemas import ( # Corrected import path
+    UserOverallBalance, # Changed from UserBalanceResponse
+    GroupBalanceSummary, # Added
+    # CurrencyBalance, # No longer directly used here
+    # CurrencyRead, # No longer directly used here
 )
-from src.core.security import (
+from app.src.core.security import ( # Corrected import path
     get_current_user,
 )
+from app.src.services import balance_service # Added balance_service import
 
-router = APIRouter(prefix="/api/v1/balances", tags=["Balances"])
+router = APIRouter(prefix="/api/v1", tags=["Balances"]) # Prefix changed to /api/v1 for consistency if other routers use it
 
 
-@router.get("/me", response_model=UserBalanceResponse)
-async def get_user_balances(
+@router.get("/balances/me", response_model=UserOverallBalance) # Path changed for clarity
+async def get_my_overall_balances( # Function name changed
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    balances_by_currency: Dict[int, CurrencyBalance] = {}
-    query = (
-        select(Expense)
-        .outerjoin(ExpenseParticipant, Expense.id == ExpenseParticipant.expense_id)
-        .where(
-            or_(
-                Expense.paid_by_user_id == current_user.id,
-                ExpenseParticipant.user_id == current_user.id,
-            )
-        )
-        .options(
-            selectinload(Expense.currency),
-            selectinload(Expense.participants),
-            selectinload(Expense.paid_by),
-        )
-        .distinct()
+    """
+    Retrieves the overall balance summary for the currently authenticated user.
+    This includes total amounts owed, total amounts owed to the user,
+    a breakdown by group, and detailed lists of debts and credits, all by currency.
+    """
+    if not current_user.id:
+        raise HTTPException(status_code=400, detail="User ID not available")
+
+    overall_balances = await balance_service.calculate_user_overall_balances(
+        user_id=current_user.id, session=session
     )
-    expenses = await session.exec(query)
-    for expense in expenses:
-        currency_id = expense.currency_id
-        if currency_id not in balances_by_currency:
-            balances_by_currency[currency_id] = CurrencyBalance(
-                currency=CurrencyRead.model_validate(expense.currency),
-                total_paid=0.0,
-                net_owed_to_user=0.0,
-                net_user_owes=0.0,
-            )
+    return overall_balances
 
-        current_currency_balance = balances_by_currency[currency_id]
-        result_participant_links = list(
-            await session.exec(
-                select(
-                    ExpenseParticipant.user_id, ExpenseParticipant.share_amount
-                ).where(ExpenseParticipant.expense_id == expense.id)
-            )
-        )
 
-        if expense.paid_by_user_id == current_user.id:
-            current_currency_balance.total_paid += expense.amount
-            for participant_id, share_amount in result_participant_links:
-                if participant_id != current_user.id:  # User who is not the payer
-                    current_currency_balance.net_owed_to_user += share_amount or 0.0
+@router.get("/groups/{group_id}/balances", response_model=GroupBalanceSummary)
+async def get_group_balances_summary( # Function name changed
+    group_id: int,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Retrieves the balance summary for a specific group.
+    This includes a list of members and their net balances within the group,
+    detailing who owes whom for what amounts, broken down by currency.
+    The requesting user must be a member of the group.
+    """
+    # Verify group existence and user membership
+    group_membership_stmt = await session.exec(
+        select(Group)
+        .join(UserGroupLink, Group.id == UserGroupLink.group_id)
+        .where(Group.id == group_id)
+        .where(UserGroupLink.user_id == current_user.id)
+        .options(selectinload(Group.members)) # Preload members to check membership without another query if needed by service
+    )
+    group = group_membership_stmt.one_or_none()
+
+    if not group:
+        # Check if group exists at all to differentiate between "not found" and "not a member"
+        group_exists_stmt = await session.exec(select(Group).where(Group.id == group_id))
+        if not group_exists_stmt.one_or_none():
+            raise HTTPException(status_code=404, detail=f"Group with ID {group_id} not found.")
         else:
-            for participant_id, share_amount in result_participant_links:
-                if participant_id == current_user.id:  # User who is the payer
-                    current_currency_balance.net_user_owes += share_amount or 0.0
+            raise HTTPException(
+                status_code=403,
+                detail=f"User is not a member of group with ID {group_id} or group does not exist.",
+            )
 
-    return UserBalanceResponse(balances=list(balances_by_currency.values()))
+    if not current_user.id:
+         raise HTTPException(status_code=400, detail="User ID not available")
+
+    group_balance_summary = await balance_service.calculate_group_balances(
+        group_id=group_id, db_user_id=current_user.id, session=session
+    )
+    if not group_balance_summary.members_balances and group_balance_summary.group_name == "Not Found": # Check based on service return for non-existent group
+        raise HTTPException(status_code=404, detail=f"Group with ID {group_id} not found during balance calculation.")
+
+    return group_balance_summary
