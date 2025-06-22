@@ -2,7 +2,7 @@ import logging
 from typing import Optional
 from pydantic import EmailStr
 
-import requests
+import httpx # Replaced requests with httpx
 
 from app.src.config import get_settings
 
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 
-def send_email_mailgun(
+async def send_email_mailgun( # Changed to async def
     email_to: EmailStr,
     subject: str,
     html_content: str
@@ -33,13 +33,14 @@ def send_email_mailgun(
         return False
 
     try:
-        response = requests.post(
-            mailgun_url,
-            auth=("api", settings.MAILGUN_API_KEY),
-            data={"from": f"SpendShare <{from_email}>",
-                  "to": [email_to],
-                  "subject": subject,
-                  "html": html_content})
+        async with httpx.AsyncClient() as client: # Use httpx.AsyncClient
+            response = await client.post( # await the post call
+                mailgun_url,
+                auth=("api", settings.MAILGUN_API_KEY),
+                data={"from": f"SpendShare <{from_email}>",
+                      "to": [email_to],
+                      "subject": subject,
+                      "html": html_content})
 
         if response.status_code == 200:
             logger.info(f"Email sent to {email_to} via Mailgun. Subject: {subject}")
@@ -47,12 +48,12 @@ def send_email_mailgun(
         else:
             logger.error(f"Failed to send email via Mailgun. Status: {response.status_code}, Response: {response.text}")
             return False
-    except requests.exceptions.RequestException as e:
+    except httpx.RequestError as e: # Changed to httpx.RequestError
         logger.error(f"Error sending email via Mailgun: {e}")
         return False
 
 
-def send_beta_interest_email(
+async def send_beta_interest_email( # Changed to async def
     email_to: EmailStr,
     interested_email: EmailStr,
     description: Optional[str] = None
@@ -75,7 +76,7 @@ def send_beta_interest_email(
     # The `email_to` for this function is the notification recipient (e.g., admin)
     # The `interested_email` is the user who signed up.
     # We are sending an email TO the admin ABOUT the interested user.
-    send_email_mailgun(email_to=email_to, subject=subject, html_content=html_content)
+    await send_email_mailgun(email_to=email_to, subject=subject, html_content=html_content) # Added await
 
 async def send_verification_email(to_email: EmailStr, token: str, subject_prefix: str = "Verify your email"):
     """
@@ -96,7 +97,7 @@ async def send_verification_email(to_email: EmailStr, token: str, subject_prefix
     </body>
     </html>
     """
-    send_email_mailgun(email_to=to_email, subject=subject, html_content=html_content)
+    await send_email_mailgun(email_to=to_email, subject=subject, html_content=html_content) # Added await
 
 async def send_email_change_verification_email(to_email: EmailStr, token: str):
     """
@@ -116,7 +117,7 @@ async def send_email_change_verification_email(to_email: EmailStr, token: str):
     </body>
     </html>
     """
-    send_email_mailgun(email_to=to_email, subject=subject, html_content=html_content)
+    await send_email_mailgun(email_to=to_email, subject=subject, html_content=html_content) # Added await
 
 async def send_password_reset_email(to_email: EmailStr, token: str):
     """
@@ -137,4 +138,4 @@ async def send_password_reset_email(to_email: EmailStr, token: str):
     </body>
     </html>
     """
-    send_email_mailgun(email_to=to_email, subject=subject, html_content=html_content)
+    await send_email_mailgun(email_to=to_email, subject=subject, html_content=html_content) # Added await
