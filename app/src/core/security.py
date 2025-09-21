@@ -1,64 +1,86 @@
-from passlib.context import CryptContext
-from datetime import datetime, timedelta, timezone
-from typing import Optional
-
-from jose import JWTError, jwt
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends, HTTPException, status, Request
 from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlmodel import select
+from clerk_backend_api import Clerk
+from clerk_backend_api.models import ClerkErrors, SDKError
 
 from src.db.database import get_session
 from src.models.models import User
+from src.config import settings
 
-# Initialize a password context (using bcrypt as the scheme)
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
-
-
-def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
-
-
-SECRET_KEY = "your-super-secret-key-please-change-in-prod"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/users/token")
-
-
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
-    else:
-        expire = datetime.now(timezone.utc) + timedelta(
-            minutes=ACCESS_TOKEN_EXPIRE_MINUTES
-        )
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
+clerk = Clerk(settings.CLERK_SECRET_KEY)
 
 
 async def get_current_user(
-    token: str = Depends(oauth2_scheme), session: AsyncSession = Depends(get_session)
+    request: Request, session: AsyncSession = Depends(get_session)
 ) -> User:
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+    auth_header = request.headers.get("Authorization")
+    if not auth_header:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authorization header missing",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str | None = payload.get("sub")
-        user_id: int | None = payload.get("user_id")
-        if username is None or user_id is None:
-            raise credentials_exception
-        user = await session.get(User, user_id)
-        if user is None or user.username != username:
-            raise credentials_exception
+        scheme, token = auth_header.split()
+        if scheme.lower() != "bearer":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication scheme",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # Verify the session token
+        clerk_session = await clerk.sessions.verify_session(token)
+        clerk_user = await clerk.users.get_user(clerk_session.user_id)
+
+        # Check if user exists in our database
+        statement = select(User).where(User.clerk_id == clerk_user.id)
+        result = await session.exec(statement)
+        user = result.first()
+
+        if not user:
+            # Create a new user in our database
+            user = User(
+                clerk_id=clerk_user.id,
+                email=clerk_user.email_addresses[0].email_address,
+                username=clerk_user.username,
+                full_name=clerk_user.first_name + " " + clerk_user.last_name,
+                email_verified=True,
+            )
+            session.add(user)
+            await session.commit()
+            await session.refresh(user)
+
         return user
-    except JWTError:
-        raise credentials_exception
+
+    except ClerkErrors.SignatureVerificationError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token signature",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except ClerkErrors.TokenExpiredError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has expired",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except SDKError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Clerk SDK error: {e}",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Authorization header format",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred: {e}",
+        )

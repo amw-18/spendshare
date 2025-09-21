@@ -31,10 +31,8 @@ class Settings(BaseSettings):
     # Support Email
     SUPPORT_EMAIL: EmailStr = "amw@spendshare.app"
 
-    # JWT Settings (common for APIs, add if you use JWT)
-    SECRET_KEY: str = "your_super_secret_key_here_please_change_in_production"
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    # Clerk Settings
+    CLERK_SECRET_KEY: str = "dummy_clerk_secret_key"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding='utf-8', extra='ignore')
 

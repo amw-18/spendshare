@@ -13,7 +13,7 @@ from src.core.security import get_current_user  # Corrected path to core.securit
 from src.db.database import get_session
 
 router = APIRouter(
-    prefix="/transactions",  # Corrected prefix
+    prefix="",
     tags=["Transactions"],
     responses={404: {"description": "Not found"}},
 )

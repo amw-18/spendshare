@@ -23,7 +23,7 @@ from src.models.schemas import (
 from src.utils import get_object_or_404
 
 
-router = APIRouter(prefix="/api/v1/conversion-rates", tags=["Conversion Rates"])
+router = APIRouter(prefix="", tags=["Conversion Rates"])
 
 
 @router.post(

@@ -16,7 +16,7 @@ from src.core.security import get_current_user
 from src.utils import get_object_or_404
 
 router = APIRouter(
-    prefix="/groups",
+    prefix="",
     tags=["groups"],
 )
 

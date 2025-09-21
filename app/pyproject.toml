@@ -21,6 +21,7 @@ dependencies = [
     "sqlmodel>=0.0.14",
     "uvicorn[standard]>=0.34.2",
     "requests>=2.31.0", # For sending emails via Mailgun
+    "clerk-backend-api>=1.0.0",
 ]
 
 [tool.pytest.ini_options]

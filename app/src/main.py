@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager  # For lifespan events in newer FastA
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.db.database import create_db_and_tables
-from src.routers import users, groups, expenses, currencies, balances, conversion_rates, transactions, beta # Added beta
+from src.routers import users, groups, expenses, currencies, balances, conversion_rates, transactions
 from src.config import settings
 
 # Lifespan context manager for startup and shutdown events
@@ -36,14 +36,13 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(users.router, prefix="/api/v1")  # Example prefix
-app.include_router(groups.router, prefix="/api/v1")
-app.include_router(expenses.router, prefix="/api/v1")
-app.include_router(transactions.router, prefix="/api/v1") # Added transactions router
-app.include_router(currencies.router, prefix="/api/v1/currencies") # Added currencies router
-app.include_router(balances.router) # Added balances router
-app.include_router(conversion_rates.router) # Added conversion_rates router
-app.include_router(beta.router, prefix="/api/v1") # Added beta router
+app.include_router(users.router, prefix="/api/v1/users")
+app.include_router(groups.router, prefix="/api/v1/groups")
+app.include_router(expenses.router, prefix="/api/v1/expenses")
+app.include_router(transactions.router, prefix="/api/v1/transactions")
+app.include_router(currencies.router, prefix="/api/v1/currencies")
+app.include_router(balances.router, prefix="/api/v1/balances")
+app.include_router(conversion_rates.router, prefix="/api/v1/conversion-rates")
 
 
 @app.get("/")

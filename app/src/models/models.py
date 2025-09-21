@@ -67,20 +67,14 @@ class ExpenseParticipant(SQLModel, table=True):
 class User(SQLModel, table=True):
     __table_args__ = {"extend_existing": True}
     id: Optional[int] = Field(default=None, primary_key=True)
-    username: str = Field(index=True, unique=True)
-    email: str = Field(unique=True, index=True)
-    hashed_password: str
+    clerk_id: Optional[str] = Field(default=None, index=True, unique=True)
+    username: str = Field(index=True)
+    email: str = Field(index=True)
+    hashed_password: Optional[str] = Field(default=None)
     full_name: Optional[str] = Field(default=None, max_length=100) # Added from UserRead requirement
 
     # Email Verification Fields
-    email_verified: bool = mapped_column(Boolean, default=False, nullable=False)
-    email_verification_token: Optional[str] = mapped_column(String, index=True, nullable=True, default=None)
-    email_verification_token_expires_at: Optional[datetime] = mapped_column(DateTime(timezone=True), nullable=True, default=None, server_default=text('NULL'))
-
-    # Email Change Fields
-    new_email_pending_verification: Optional[str] = mapped_column(String, nullable=True, default=None)
-    email_change_token: Optional[str] = mapped_column(String, index=True, nullable=True, default=None)
-    email_change_token_expires_at: Optional[datetime] = mapped_column(DateTime(timezone=True), nullable=True, default=None, server_default=text('NULL'))
+    email_verified: bool = mapped_column("email_verified", Boolean, default=True, nullable=False)
 
     groups: List["Group"] = Relationship(
         back_populates="members",
